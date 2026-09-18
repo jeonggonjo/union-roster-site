@@ -1,4 +1,4 @@
-/* K-Design System — Built 2026-09-18 10:19:33 */
+/* K-Design System — Built 2026-09-18 10:51:17 */
 
 
 /* ── 00-tokens.css ── */
@@ -4221,4 +4221,89 @@ body:has(.page-fixed) { height: 100vh; height: 100dvh; overflow: hidden; }
   .nav-simple .nav-inner { gap: 6px; }
   .nav-links { gap: 0; }
 }
+
+/* ── 커스텀 셀렉트(정적 페이지·관리 도구 공용): 팝업은 position:fixed, 화면 벗어나면 위로 flip ── */
+.custom-select { display: block; width: 100%; }
+.custom-select-trigger { height: 40px; width: 100%; font-size: 0.85rem; }
+.custom-select-trigger .cs-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.custom-select-options { position: fixed; top: auto; left: auto; right: auto; max-height: 260px; padding: 6px; }
+.custom-select-option { border-radius: 8px; padding: 9px 12px; }
+.custom-select-option.selected::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--mint-500); flex-shrink: 0; }
+.custom-select-option:not(.selected)::before { content: ''; width: 6px; height: 6px; flex-shrink: 0; }
+.custom-select.up .custom-select-trigger::after { transform: translateY(-50%) rotate(180deg); }
+select.cs-native { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+
+/* ── 관리자 확인 모달 (새 디자인) ── */
+.um-modal.um-auth { max-width: 380px; border-radius: 20px; }
+.um-auth .um-modal-head { display: none; }
+.um-auth .um-modal-body { padding: 32px 28px 24px; text-align: center; }
+.um-auth-icon { width: 60px; height: 60px; margin: 0 auto 14px; border-radius: 18px; background: linear-gradient(135deg, var(--mint-500), var(--mint-700)); display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 20px rgba(13,148,136,0.3); }
+.um-auth-icon svg { width: 28px; height: 28px; stroke: #fff; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.um-auth h3 { font-family: var(--font-heading); font-size: 1.25rem; font-weight: 700; color: var(--navy-900); margin-bottom: 4px; }
+.um-auth .um-sub { font-size: 0.82rem; color: var(--slate-500); margin-bottom: 22px; line-height: 1.5; }
+.um-field { position: relative; text-align: left; margin-bottom: 8px; }
+.um-field input { width: 100%; height: 48px; padding: 0 46px 0 16px; border: 1.5px solid var(--slate-200); border-radius: 12px; font-size: 1rem; letter-spacing: 0.1em; font-family: var(--font-body); outline: none; transition: border-color .2s, box-shadow .2s; }
+.um-field input:focus { border-color: var(--mint-500); box-shadow: 0 0 0 4px rgba(20,184,166,0.12); }
+.um-field input.err { border-color: var(--danger); animation: um-shake 0.3s; }
+.um-field input::placeholder { letter-spacing: normal; color: var(--slate-400); }
+.um-eye { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 34px; height: 34px; border: none; background: none; color: var(--slate-400); cursor: pointer; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+.um-eye:hover { background: var(--slate-100); color: var(--slate-600); }
+.um-eye svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.um-auth .um-err { min-height: 1.3em; margin: 2px 0 10px; text-align: left; }
+.um-primary { width: 100%; height: 46px; border: none; border-radius: 12px; background: linear-gradient(135deg, var(--mint-500), var(--mint-600)); color: #fff; font-size: 0.95rem; font-weight: 700; font-family: var(--font-body); cursor: pointer; box-shadow: 0 6px 16px rgba(13,148,136,0.28); transition: transform .15s, box-shadow .15s; }
+.um-primary:hover { transform: translateY(-1px); box-shadow: 0 8px 22px rgba(13,148,136,0.35); }
+.um-primary:disabled { opacity: 0.6; transform: none; cursor: default; }
+.um-foot { font-size: 0.74rem; color: var(--slate-400); margin-top: 16px; line-height: 1.5; }
+.um-foot a { color: var(--mint-700); }
+.um-link { background: none; border: none; color: var(--slate-400); font-size: 0.78rem; cursor: pointer; margin-top: 10px; font-family: var(--font-body); text-decoration: underline; }
+.um-link:hover { color: var(--mint-700); }
+@keyframes um-shake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+
+/* 토큰 입력(저장 기능) */
+.um-token input { letter-spacing: normal; font-size: 0.85rem; font-family: ui-monospace, Consolas, monospace; }
+.um-help { text-align: left; font-size: 0.78rem; color: var(--slate-500); background: var(--slate-50); border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; line-height: 1.6; }
+.um-help ol { padding-left: 18px; margin: 4px 0 0; }
+
+/* 메모 입력 모달 */
+.um-memo textarea { width: 100%; min-height: 140px; border: 1.5px solid var(--slate-200); border-radius: 12px; padding: 12px 14px; font-size: 0.9rem; font-family: var(--font-body); resize: vertical; outline: none; }
+.um-memo textarea:focus { border-color: var(--mint-500); box-shadow: 0 0 0 4px rgba(20,184,166,0.12); }
+.um-memo .um-actions { gap: 8px; }
+
+/* ── 관리자 모드 편집 컨트롤 ── */
+.priv-actions { display: none; gap: 8px; flex-wrap: wrap; }
+.unlocked .priv-actions { display: flex; }
+.priv-col-inline { display: none; }
+.unlocked .priv-col-inline { display: inline; }
+.priv-inline-text { margin-left: 8px; color: var(--slate-400); font-weight: 400; font-size: 0.78rem; }
+.s3-chip { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px; border-radius: 100px; border: 1px solid var(--slate-200); background: #fff; color: var(--slate-400); font-size: 0.75rem; font-weight: 600; cursor: pointer; font-family: var(--font-body); white-space: nowrap; transition: all .15s; }
+.s3-chip::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--slate-300); }
+.s3-chip.on { background: var(--mint-50); border-color: var(--mint-300); color: var(--mint-700); }
+.s3-chip.on::before { background: var(--mint-500); }
+.s3-chip:hover { border-color: var(--mint-400); }
+.memo-btn { display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 10px; border-radius: 6px; border: 1px dashed var(--slate-300); background: #fff; color: var(--slate-500); font-size: 0.75rem; cursor: pointer; font-family: var(--font-body); white-space: nowrap; }
+.memo-btn:hover { border-color: var(--mint-400); color: var(--mint-700); }
+.memo-btn.has { border-style: solid; border-color: var(--slate-200); color: var(--slate-700); background: var(--slate-50); }
+.memo-cell { cursor: pointer; }
+.memo-cell .memo-text { display: block; margin-bottom: 4px; }
+.mcard-admin { display: none; gap: 8px; align-items: center; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--slate-200); }
+.unlocked .mcard-admin { display: flex; flex-wrap: wrap; }
+.um-toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--slate-900); color: #fff; font-size: 0.82rem; padding: 10px 16px; border-radius: 100px; box-shadow: var(--shadow-xl); z-index: 3000; opacity: 0; transition: opacity .2s; pointer-events: none; white-space: nowrap; }
+.um-toast.show { opacity: 1; }
+.um-toast.err { background: #b91c1c; }
+.um-toast.ok { background: var(--mint-700); }
+.lock-btn.dirty::after { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--warning); margin-left: 6px; }
+
+@media (max-width: 768px) {
+  .um-auth .um-modal-body { padding: 26px 20px 20px; }
+  .priv-actions { width: 100%; }
+}
+
+/* 모바일 카드: 링크 부분과 관리자 편집 행 분리 */
+.mcard-link { display: block; color: inherit; text-decoration: none; }
+.mcard-link:hover { text-decoration: none; color: inherit; }
+
+/* 관리자 전용 인라인 요소 기본 숨김(인라인 style 대신 클래스, CSP 대응) */
+.priv-inline { display: none; }
+.priv-actions-open { display: flex !important; }
+.um-modal .priv-actions { display: flex; }
 
