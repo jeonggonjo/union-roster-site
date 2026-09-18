@@ -262,8 +262,10 @@
   //  REMOTE: 게시 페이지 → 비밀번호로 풀린 토큰으로 저장소 data/admin.json(암호화)에 커밋 (1.5초 후 자동)
   var LOCAL = false, REMOTE = null, CFG = null;
   var adm = null, dirty = false, saveTimer = null, saving = false;
-  var touched = { memos: {}, season3: {}, status: {} };   // 이 세션에서 바꾼 키만 기록 → 저장 시 최신 문서에 합침
+  var touched = { memos: {}, season3: {}, status: {}, overrides: {}, added: {}, hidden: {} };   // 이 세션에서 바꾼 키만 기록 → 저장 시 최신 문서에 합침
   function touch(kind, id) { touched[kind][id] = true; }
+  var pubLocal = { overrides: {}, added: {}, hidden: {} };   // 이 세션의 수동 수정·추가·숨김 (원격 저장 전 상태)
+  function pubGet(kind, id) { return has(pubLocal[kind], id) ? pubLocal[kind][id] : (pubOverlay && has(pubOverlay[kind], id) ? pubOverlay[kind][id] : undefined); }
   function apiEdit(charId, field, value) {
     return fetch('/api/edit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ char_id: charId, field: field, value: value }) })
       .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || ('저장 실패 ' + r.status)); return j; }); });
@@ -328,10 +330,18 @@
       return ghPut(REMOTE.adminFile, payload, '관리자 수정 ' + adm.updated_at.replace('T', ' '));
     }).then(function (r) {
       if (!r.ok) return fail(r);
-      // 공개 오버레이(시즌3 명단만) - 모든 방문자에게 즉시 반영
-      var pub = { v: 1, updated_at: adm.updated_at, season3: Object.assign({}, adm.season3 || {}) };
-      pubOverlay = pub; touched = { memos: {}, season3: {}, status: {} };
-      return ghPut(PUBLIC_FILE, JSON.stringify(pub), '시즌3 명단 갱신 ' + adm.updated_at.replace('T', ' ')).then(function (r2) { if (!r2.ok) return fail(r2); });
+      // 공개 오버레이(시즌3·수동 수정·추가·숨김) - 최신본을 다시 받아 이 세션 변경만 얹음
+      return fetchPublic(CFG && CFG.root || './').then(function (latest) {
+        var pub = latest && latest.season3 ? latest : { v: 2, season3: {}, overrides: {}, added: {}, hidden: {} };
+        pub.v = 2; pub.overrides = pub.overrides || {}; pub.added = pub.added || {}; pub.hidden = pub.hidden || {}; pub.season3 = pub.season3 || {};
+        Object.keys(touched.season3).forEach(function (id) { pub.season3[id] = adm.season3[id] ? 1 : 0; });
+        Object.keys(touched.overrides).forEach(function (id) { pub.overrides[id] = pubLocal.overrides[id]; });
+        Object.keys(touched.added).forEach(function (id) { pub.added[id] = pubLocal.added[id]; });
+        Object.keys(touched.hidden).forEach(function (id) { if (pubLocal.hidden[id]) pub.hidden[id] = 1; else delete pub.hidden[id]; });
+        pub.updated_at = adm.updated_at;
+        pubOverlay = pub; touched = { memos: {}, season3: {}, status: {}, overrides: {}, added: {}, hidden: {} };
+        return ghPut(PUBLIC_FILE, JSON.stringify(pub), '명단 갱신 ' + adm.updated_at.replace('T', ' ')).then(function (r2) { if (!r2.ok) return fail(r2); });
+      });
     }).then(function () {
       dirty = false; saving = false; if (lockBtn) lockBtn.classList.remove('dirty');
       toast('저장됨 · 바로 반영됩니다', 'ok');
@@ -347,6 +357,37 @@
         var ta = back.querySelector('#um-memo-text'); setTimeout(function () { ta.focus(); }, 50);
         back.querySelector('#um-memo-save').addEventListener('click', function () { onSave(ta.value.trim()); close(); });
         back.querySelector('#um-memo-clear').addEventListener('click', function () { onSave(''); close(); });
+      } });
+  }
+
+  // ── 맹원 수정/추가 폼 ──
+  var JOBS = ['진군', '병참', '청낭', '천공', '신행', '기좌'];
+  function rowForm(title, cur, onSave, opts) {
+    cur = cur || {}; opts = opts || {};
+    function inp(name, label, val, type) { return '<label class="um-lbl">' + label + '<input name="' + name + '" type="' + (type || 'text') + '" value="' + esc(val === undefined || val === null ? '' : val) + '"' + (name === 'nickname' ? ' required' : '') + '></label>'; }
+    var jobOpts = JOBS.concat(cur.job && JOBS.indexOf(cur.job) < 0 ? [cur.job] : []).map(function (j) { return '<option value="' + esc(j) + '"' + (j === cur.job ? ' selected' : '') + '>' + esc(j) + '</option>'; }).join('');
+    openModal({ cls: 'um-form', title: title, body:
+      '<form id="um-row-form"><div class="um-grid">' +
+      inp('nickname', '닉네임', cur.nickname) +
+      '<label class="um-lbl">직업<select name="job"><option value="">선택</option>' + jobOpts + '</select></label>' +
+      inp('rank', '직위', cur.rank) + inp('garrison', '주둔지', cur.garrison) +
+      inp('prosperity', '번영', cur.prosperity, 'number') + inp('merit', '무훈 (숫자, 예 5200000)', cur.merit, 'number') +
+      inp('contribution', '공헌', cur.contribution, 'number') + inp('siege_count', '공성 횟수', cur.siege_count, 'number') +
+      '</div><div class="um-err" id="um-row-err"></div><div class="um-actions">' +
+      (opts.onReset ? '<button type="button" class="btn btn-secondary" id="um-row-reset">엑셀 값으로 되돌리기</button>' : '') +
+      (opts.onHide ? '<button type="button" class="btn btn-danger" id="um-row-hide">목록에서 빼기</button>' : '') +
+      '<button type="submit" class="btn btn-primary">저장</button></div></form>',
+      onReady: function (back, close) {
+        var f = back.querySelector('#um-row-form'); setTimeout(function () { f.nickname.focus(); }, 50);
+        f.addEventListener('submit', function (e) {
+          e.preventDefault();
+          var v = {}; ['nickname', 'job', 'rank', 'garrison'].forEach(function (k) { v[k] = f[k].value.trim(); });
+          ['prosperity', 'merit', 'contribution', 'siege_count'].forEach(function (k) { var n = parseInt(String(f[k].value).replace(/[^0-9-]/g, ''), 10); v[k] = isNaN(n) ? 0 : n; });
+          if (!v.nickname) { back.querySelector('#um-row-err').textContent = '닉네임을 입력하세요.'; return; }
+          onSave(v); close();
+        });
+        var rb = back.querySelector('#um-row-reset'); if (rb) rb.addEventListener('click', function () { opts.onReset(); close(); });
+        var hb = back.querySelector('#um-row-hide'); if (hb) hb.addEventListener('click', function () { if (confirm('이 맹원을 목록에서 뺄까요? (관리자 모드의 이전 맹원에서 되돌릴 수 있음)')) { opts.onHide(); close(); } });
       } });
   }
 
@@ -454,8 +495,18 @@
     }
     function statusOf(m) { return (adm && adm.status && adm.status[m.char_id]) || m.status; }
     function aliasList(m) { return m.former ? (m.aliases || []) : ((priv && priv.aliases[m.char_id]) || []); }
+    function effRow(m) {   // 엑셀 값 + 수동 수정(override)
+      var ov = pubGet('overrides', m.char_id);
+      return ov ? Object.assign({}, m, ov, { char_id: m.char_id }) : m;
+    }
+    function isHidden(id) { var h = pubGet('hidden', id); return !!h; }
     function baseRows() {
-      var rows = members.filter(function (m) { return mode !== 'season3' || s3(m); });
+      var ids = {};
+      var rows = members.filter(function (m) { return !isHidden(m.char_id); }).map(function (m) { ids[m.char_id] = 1; return effRow(m); });
+      // 수동 추가 맹원 (페이지 저장분 + 이 세션)
+      var addedAll = Object.assign({}, (pubOverlay && pubOverlay.added) || {}, pubLocal.added);
+      Object.keys(addedAll).forEach(function (id) { if (!ids[id] && !isHidden(id)) { var r = Object.assign({ manual: 1 }, addedAll[id], { char_id: id }); r.season3 = has(adm && adm.season3, id) ? adm.season3[id] : (pubOverlay && has(pubOverlay.season3, id) ? pubOverlay.season3[id] : (r.season3 || 0)); rows.push(r); } });
+      rows = rows.filter(function (m) { return mode !== 'season3' || s3(m); });
       if (mode !== 'season3' && priv && showFormer) priv.former.forEach(function (f) { rows.push(Object.assign({ former: true }, f)); });
       return rows;
     }
@@ -480,7 +531,8 @@
         var aliasHtml = al.length ? '<div class="alias">이전 닉네임: ' + esc(al.join(', ')) + '</div>' : '';
         var nameCell = m.former
           ? '<a href="#" class="fw-600 former-link" data-id="' + id + '">' + esc(m.nickname) + '</a> ' + statusBadge(statusOf(m)) + aliasHtml
-          : '<a href="' + memberBase + encodeURIComponent(m.char_id) + '.html" class="fw-600">' + esc(m.nickname) + '</a>' + (mode !== 'season3' && on ? ' <span class="badge badge-mint">시즌3</span>' : '') + aliasHtml;
+          : (m.manual ? '<span class="fw-600">' + esc(m.nickname) + '</span> <span class="badge badge-gray" title="수동 추가">수동</span>' : '<a href="' + memberBase + encodeURIComponent(m.char_id) + '.html" class="fw-600">' + esc(m.nickname) + '</a>') +
+            (mode !== 'season3' && on ? ' <span class="badge badge-mint">시즌3</span>' : '') + (edit ? ' <button type="button" class="row-edit-btn" data-edit="' + id + '" title="수정">✎</button>' : '') + aliasHtml;
         var s3cell = m.former ? '' : (edit ? '<button type="button" class="s3-chip ' + (on ? 'on' : '') + '" data-s3="' + id + '">' + (on ? '시즌3' : '미정') + '</button>' : (on ? '<span class="badge badge-mint">시즌3</span>' : '<span class="badge badge-gray">미정</span>'));
         var memoCell = '<span class="memo-text">' + esc(memo) + '</span>' + (edit ? '<button type="button" class="memo-btn ' + (memo ? 'has' : '') + '" data-memo="' + id + '">' + (memo ? '수정' : '메모 입력') + '</button>' : '');
         html += '<tr class="' + (m.former ? 'former' : '') + '"><td class="num">' + (i + 1) + '</td>' +
@@ -492,14 +544,14 @@
           '<td class="nowrap">' + esc(m.garrison || '-') + '</td>' +
           '<td class="priv-col">' + s3cell + '</td>' +
           '<td class="priv-col memo-cell">' + memoCell + '</td></tr>';
-        var link = m.former ? '#' : memberBase + encodeURIComponent(m.char_id) + '.html';
+        var link = (m.former || m.manual) ? '#' : memberBase + encodeURIComponent(m.char_id) + '.html';
         chtml += '<div class="mrow ' + (m.former ? 'former' : '') + '">' +
           '<a class="mrow-main' + (m.former ? ' former-link' : '') + '" href="' + link + '" data-id="' + id + '">' +
           '<span class="mrow-no">' + (i + 1) + '</span>' +
           '<span class="mrow-name">' + esc(m.nickname) + ' ' + jobBadge(m.job) + (m.former ? ' ' + statusBadge(statusOf(m)) : (mode !== 'season3' && on ? ' <span class="badge badge-mint">시즌3</span>' : '')) + '</span>' +
           '<span class="mrow-v hi">' + fmtShort(m.merit) + '</span><span class="mrow-v">' + fmtShort(m.contribution) + '</span><span class="mrow-v">' + fmtN(m.siege_count) + '</span>' +
           '</a>' +
-          (edit ? '<div class="mrow-admin">' + s3cell + '<button type="button" class="memo-btn ' + (memo ? 'has' : '') + '" data-memo="' + id + '">' + (memo ? '메모 수정' : '메모') + '</button>' + (memo ? '<span class="mrow-memo">' + esc(memo) + '</span>' : '') + '</div>' : '') +
+          (edit ? '<div class="mrow-admin">' + s3cell + '<button type="button" class="memo-btn ' + (memo ? 'has' : '') + '" data-memo="' + id + '">' + (memo ? '메모 수정' : '메모') + '</button>' + (m.former ? '' : '<button type="button" class="memo-btn" data-edit="' + id + '">수정</button>') + (memo ? '<span class="mrow-memo">' + esc(memo) + '</span>' : '') + '</div>' : '') +
           '</div>';
       });
       var head = '<div class="mrow mrow-head"><div class="mrow-main"><span class="mrow-no">#</span>' +
@@ -510,10 +562,23 @@
       chtml = head + chtml;
       tbody.innerHTML = html; cards.innerHTML = chtml;
     }
-    function findRow(id) { var m = members.filter(function (x) { return x.char_id === id; })[0]; if (!m && priv) { var f = priv.former.filter(function (x) { return x.char_id === id; })[0]; if (f) m = Object.assign({ former: true }, f); } return m; }
+    function findRow(id) {
+      var m = members.filter(function (x) { return x.char_id === id; })[0];
+      if (!m) { var a = pubGet('added', id); if (a) m = Object.assign({ manual: 1 }, a, { char_id: id }); }
+      if (!m && priv) { var f = priv.former.filter(function (x) { return x.char_id === id; })[0]; if (f) m = Object.assign({ former: true }, f); }
+      return m;
+    }
     // 저장 경로 통합: 성공 시 onDone(로컬 상태 갱신) 실행
     function save(charId, field, value, onDone) {
-      if (LOCAL) return apiEdit(charId, field, value).then(function () { onDone(); render(); toast('저장됨', 'ok'); }).catch(function (e) { toast(e.message, 'err'); });
+      if (LOCAL) return apiEdit(charId, field, value).then(function (j) { onDone(j); render(); toast('저장됨', 'ok'); }).catch(function (e) { toast(e.message, 'err'); });
+      if (REMOTE && (field === 'row' || field === 'add' || field === 'hide' || field === 'unhide' || field === 'row_reset')) {
+        if (field === 'row') { var base = findRow(charId) || {}; var cur = base.manual ? pubGet('added', charId) : (pubGet('overrides', charId) || {}); var nv = Object.assign({}, cur, value); if (base.manual) { pubLocal.added[charId] = Object.assign({}, nv, { char_id: charId, season3: base.season3 ? 1 : 0 }); touch('added', charId); } else { pubLocal.overrides[charId] = nv; touch('overrides', charId); } }
+        else if (field === 'row_reset') { pubLocal.overrides[charId] = {}; touch('overrides', charId); }
+        else if (field === 'add') { var nid = 'm' + Date.now(); pubLocal.added[nid] = Object.assign({}, value, { char_id: nid, season3: mode === 'season3' ? 1 : 0 }); touch('added', nid); if (mode === 'season3') { adm.season3[nid] = 1; touch('season3', nid); } }
+        else if (field === 'hide') { pubLocal.hidden[charId] = 1; touch('hidden', charId); }
+        else if (field === 'unhide') { pubLocal.hidden[charId] = 0; touch('hidden', charId); }
+        onDone({}); render(); markDirty(); return Promise.resolve();
+      }
       if (REMOTE) { if (field === 'memo') { adm.memos[charId] = value; touch('memos', charId); } else if (field === 'season3') { adm.season3[charId] = value ? 1 : 0; touch('season3', charId); } else if (field === 'status') { adm.status[charId] = value; touch('status', charId); } onDone(); render(); markDirty(); return Promise.resolve(); }
       return Promise.resolve();
     }
@@ -530,13 +595,16 @@
         '<dt>가입 확인</dt><dd>' + esc(fmtD(f.joined_at)) + '</dd><dt>마지막 확인</dt><dd>' + esc(fmtT(f.last_seen_at)) + '</dd>' +
         (f.left_at ? '<dt>처리일</dt><dd>' + esc(fmtD(f.left_at)) + '</dd>' : '') + '<dt>메모</dt><dd id="fm-memo">' + esc(memoOf(f) || '-') + '</dd></dl>' +
         (canEdit() ? '<div class="priv-actions priv-actions-open mt-2">' +
-          '<button type="button" class="btn-action-sm" data-st="left">탈퇴 처리</button><button type="button" class="btn-action-sm delete" data-st="kicked">추방 처리</button><button type="button" class="btn-action-sm" data-st="active">미확인으로 되돌리기</button>' +
+          (f.hidden ? '<button type="button" class="btn-action-sm add" data-st="unhide">목록으로 되돌리기</button>' :
+          '<button type="button" class="btn-action-sm" data-st="left">탈퇴 처리</button><button type="button" class="btn-action-sm delete" data-st="kicked">추방 처리</button><button type="button" class="btn-action-sm" data-st="active">미확인으로 되돌리기</button>') +
           '<button type="button" class="btn-action-sm add" id="fm-memo-btn">메모 입력</button></div>' : '') +
         '<div class="table-wrap mt-3"><table class="data-table"><thead><tr><th>구분</th><th>시각</th><th>닉네임</th><th>직업</th><th>직위</th><th class="num">번영</th><th class="num">무훈</th><th class="num">공헌</th><th class="num">공성</th><th>주둔지</th></tr></thead><tbody>' + rows + '</tbody></table></div>',
         onReady: function (back, close) {
           if (!canEdit()) return;
           back.querySelectorAll('[data-st]').forEach(function (b) { b.addEventListener('click', function () {
-            var v = b.getAttribute('data-st'); save(f.char_id, 'status', v, function () { f.status = v; }); close();
+            var v = b.getAttribute('data-st');
+            if (v === 'unhide') { save(f.char_id, 'unhide', null, function () { f.status = 'active'; if (priv) priv.former = priv.former.filter(function (x) { return x.char_id !== f.char_id; }); }); close(); return; }
+            save(f.char_id, 'status', v, function () { f.status = v; }); close();
           }); });
           back.querySelector('#fm-memo-btn').addEventListener('click', function () { memoModal(f.nickname, memoOf(f), function (v) {
             save(f.char_id, 'memo', v, function () { f.memo = v; back.querySelector('#fm-memo').textContent = v || '-'; });
@@ -551,6 +619,16 @@
       }
       var a = e.target.closest('.former-link'); if (a) { e.preventDefault(); showFormerDetail(a.getAttribute('data-id')); return; }
       if (!canEdit()) return;
+      var ed = e.target.closest('[data-edit]'); if (ed) {
+        var eid = ed.getAttribute('data-edit'), em = findRow(eid); if (!em) return;
+        rowForm(em.nickname + ' 수정', em, function (v) {
+          save(eid, 'row', v, function () { if (LOCAL) { var ov = em.manual ? null : (v); if (em.manual) Object.assign(em, v); else { pubLocal.overrides[eid] = Object.assign({}, pubGet('overrides', eid) || {}, ov); } } });
+        }, {
+          onReset: em.manual ? null : function () { save(eid, 'row_reset', null, function () { pubLocal.overrides[eid] = {}; }); },
+          onHide: function () { save(eid, 'hide', null, function () { pubLocal.hidden[eid] = 1; }); }
+        });
+        return;
+      }
       var s = e.target.closest('[data-s3]'); if (s) {
         var id = s.getAttribute('data-s3'), m = findRow(id); if (!m) return;
         var nv = s3(m) ? 0 : 1;
@@ -566,6 +644,16 @@
     fq.addEventListener('input', render);
     fjob.addEventListener('change', render);
     var reset = document.getElementById('f-reset');
+    var addBtn = document.getElementById('f-add');
+    if (addBtn) addBtn.addEventListener('click', function (ev) {
+      ev.preventDefault();
+      if (!canEdit()) return toast('관리자 모드에서만 추가할 수 있습니다', 'err');
+      rowForm('맹원 추가', { job: '' }, function (v) {
+        save(null, 'add', v, function (j) {
+          if (LOCAL) { var nid = (j && j.char_id) || ('m' + Date.now()); pubLocal.added[nid] = Object.assign({}, v, { char_id: nid, season3: mode === 'season3' ? 1 : 0 }); if (mode === 'season3') apiEdit(nid, 'season3', 1).then(function () { render(); }); }
+        });
+      });
+    });
     if (reset) reset.addEventListener('click', function (ev) { ev.preventDefault(); fq.value = ''; fjob.value = ''; if (fjob._csSync) fjob._csSync(); st.sort = 'merit'; st.order = 'desc'; render(); });
     if (formerBtn) formerBtn.addEventListener('click', function (ev) {
       ev.preventDefault(); showFormer = !showFormer;

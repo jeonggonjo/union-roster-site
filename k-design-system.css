@@ -1,4 +1,4 @@
-/* K-Design System — Built 2026-09-18 13:03:22 */
+/* K-Design System — Built 2026-09-18 17:14:01 */
 
 
 /* ── 00-tokens.css ── */
@@ -4334,4 +4334,14 @@ select.cs-native { position: absolute; width: 1px; height: 1px; opacity: 0; poin
   .member-cards { display: block; gap: 0; padding: 0; border: 1px solid var(--slate-200); border-radius: 10px; background: #fff; }
   .page-fixed .member-cards { padding: 0; }
 }
+
+/* ── 맹원 수정/추가 폼 모달 ── */
+.um-modal.um-form { max-width: 520px; }
+.um-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+.um-lbl { display: flex; flex-direction: column; gap: 4px; font-size: 0.78rem; font-weight: 600; color: var(--slate-500); }
+.um-lbl input, .um-lbl select { height: 40px; font-size: 0.9rem; }
+.um-form .um-actions { flex-wrap: wrap; gap: 8px; }
+.row-edit-btn { border: none; background: none; color: var(--slate-400); cursor: pointer; font-size: 0.85rem; padding: 0 4px; line-height: 1; vertical-align: middle; }
+.row-edit-btn:hover { color: var(--mint-700); }
+@media (max-width: 768px) { .um-grid { grid-template-columns: 1fr 1fr; gap: 8px; } .um-lbl input, .um-lbl select { height: 38px; } }
 
