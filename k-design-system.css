@@ -1,4 +1,4 @@
-/* K-Design System — Built 2026-09-18 10:51:17 */
+/* K-Design System — Built 2026-09-18 11:32:20 */
 
 
 /* ── 00-tokens.css ── */
@@ -4306,4 +4306,8 @@ select.cs-native { position: absolute; width: 1px; height: 1px; opacity: 0; poin
 .priv-inline { display: none; }
 .priv-actions-open { display: flex !important; }
 .um-modal .priv-actions { display: flex; }
+
+/* 새 게시본 안내 바 */
+.um-update { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 2500; display: flex; align-items: center; gap: 10px; background: var(--navy-900); color: #fff; font-size: 0.82rem; padding: 10px 14px 10px 16px; border-radius: 100px; box-shadow: var(--shadow-xl); white-space: nowrap; }
+.um-update button { height: 30px; padding: 0 12px; border: none; border-radius: 100px; background: var(--mint-500); color: #fff; font-weight: 700; font-size: 0.8rem; cursor: pointer; font-family: var(--font-body); }
 

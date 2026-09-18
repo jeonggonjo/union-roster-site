@@ -143,6 +143,22 @@
   var rsT = null;
   window.addEventListener('resize', function () { clearTimeout(rsT); rsT = setTimeout(function () { redraws.forEach(function (f) { f(); }); }, 200); });
 
+  // ── 새 게시본 감지: 페이지 캐시(GitHub Pages 최대 10분)가 남아도 새 데이터가 있으면 안내 ──
+  (function () {
+    var meta = document.querySelector('meta[name="generated"]'), rosterMeta = document.getElementById('roster-data') || document.getElementById('member-data');
+    if (!meta || !rosterMeta) return;
+    var cfg; try { cfg = JSON.parse(rosterMeta.textContent); } catch (e) { return; }
+    if (cfg.local) return;
+    var root = cfg.root || './';
+    fetch(root + 'version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (v) {
+      if (!v || !v.generatedAt || v.generatedAt <= meta.getAttribute('content')) return;
+      var bar = document.createElement('div'); bar.className = 'um-update';
+      bar.innerHTML = '<span>새 데이터가 있습니다 (' + v.generatedAt.slice(5, 16).replace('T', ' ') + ' 게시)</span><button type="button">새로고침</button>';
+      bar.querySelector('button').addEventListener('click', function () { location.replace(location.pathname + '?r=' + Date.now()); });
+      document.body.appendChild(bar);
+    }).catch(function () { /* ignore */ });
+  })();
+
   // ── 모달·토스트 ──
   function openModal(opts) {
     var back = document.createElement('div'); back.className = 'um-modal-back';
