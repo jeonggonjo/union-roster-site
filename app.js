@@ -312,13 +312,29 @@
       if (privMemo) privMemo.textContent = memoOfM() || '(메모 없음)';
       var al = document.getElementById('priv-alias'); if (al && embedded) al.textContent = embedded.aliases && embedded.aliases.length ? embedded.aliases.join(', ') : '(변경 없음)';
     }
+    function showActions() { if (actions) { actions.hidden = false; actions.classList.add('priv-actions-open'); } }
     onUnlock.push(function (data) {
       embedded = data;
-      if (data.remote) { REMOTE = data.remote; loadAdmin(M.root || '../').then(function () { if (actions) { actions.hidden = false; actions.classList.add('priv-actions-open'); } paintMember(); }); }
-      else paintMember();
+      if (data.remote) { REMOTE = data.remote; loadAdmin(M.root || '../').then(function () { showActions(); paintMember(); }); }
+      else { paintMember(); toast('보기 전용: PC 관리 도구에서 저장용 토큰을 등록하고 게시하면 폰에서도 수정됩니다'); }
     });
-    if (btnS3) btnS3.addEventListener('click', function () { if (!REMOTE) return; adm.season3[M.char_id] = s3Of() ? 0 : 1; paintMember(); markDirty(); });
-    if (btnMemo) btnMemo.addEventListener('click', function () { if (!REMOTE) return; memoModal(document.querySelector('h1').textContent, memoOfM(), function (v) { adm.memos[M.char_id] = v; paintMember(); markDirty(); }); });
+    if (M.local) {   // 내 PC 수정 모드: 평문 데이터, /api/edit 즉시 저장
+      LOCAL = true; embedded = { memo: M.memo || '', aliases: M.aliases || [] };
+      document.body.classList.add('unlocked'); showActions(); paintMember();
+    }
+    if (btnS3) btnS3.addEventListener('click', function () {
+      var nv = s3Of() ? 0 : 1;
+      if (LOCAL) return apiEdit(M.char_id, 'season3', nv).then(function () { M.season3 = nv; paintMember(); toast(nv ? '시즌3에 넣었습니다' : '시즌3에서 뺐습니다', 'ok'); }).catch(function (e) { toast(e.message, 'err'); });
+      if (!REMOTE) return toast('보기 전용입니다. PC 관리 도구에서 토큰을 등록하세요', 'err');
+      adm.season3[M.char_id] = nv; paintMember(); markDirty();
+    });
+    if (btnMemo) btnMemo.addEventListener('click', function () {
+      if (!LOCAL && !REMOTE) return toast('보기 전용입니다. PC 관리 도구에서 토큰을 등록하세요', 'err');
+      memoModal(document.querySelector('h1').textContent, memoOfM(), function (v) {
+        if (LOCAL) return apiEdit(M.char_id, 'memo', v).then(function () { embedded.memo = v; paintMember(); toast('메모 저장됨', 'ok'); }).catch(function (e) { toast(e.message, 'err'); });
+        adm.memos[M.char_id] = v; paintMember(); markDirty();
+      });
+    });
   }
 
   // ── 목록 페이지 ──
@@ -359,7 +375,7 @@
   var rosterEl = document.getElementById('roster-data');
   if (rosterEl) {
     var R = JSON.parse(rosterEl.textContent); CFG = R;
-    var members = R.rows, root = R.root || './', mode = R.mode || 'all';
+    var members = R.rows, root = R.root || './', mode = R.mode || 'all', memberBase = R.memberBase || (root + 'members/');
     LOCAL = !!R.local;
     var priv = null, showFormer = false;
     var NUMERIC = { prosperity: 1, merit: 1, contribution: 1, siege_count: 1 };
@@ -402,7 +418,7 @@
         var aliasHtml = al.length ? '<div class="alias">이전 닉네임: ' + esc(al.join(', ')) + '</div>' : '';
         var nameCell = m.former
           ? '<a href="#" class="fw-600 former-link" data-id="' + id + '">' + esc(m.nickname) + '</a> ' + statusBadge(statusOf(m)) + aliasHtml
-          : '<a href="' + root + 'members/' + encodeURIComponent(m.char_id) + '.html" class="fw-600">' + esc(m.nickname) + '</a>' + (mode !== 'season3' && on ? ' <span class="badge badge-mint">시즌3</span>' : '') + aliasHtml;
+          : '<a href="' + memberBase + encodeURIComponent(m.char_id) + '.html" class="fw-600">' + esc(m.nickname) + '</a>' + (mode !== 'season3' && on ? ' <span class="badge badge-mint">시즌3</span>' : '') + aliasHtml;
         var s3cell = m.former ? '' : (edit ? '<button type="button" class="s3-chip ' + (on ? 'on' : '') + '" data-s3="' + id + '">' + (on ? '시즌3' : '미정') + '</button>' : (on ? '<span class="badge badge-mint">시즌3</span>' : '<span class="badge badge-gray">미정</span>'));
         var memoCell = '<span class="memo-text">' + esc(memo) + '</span>' + (edit ? '<button type="button" class="memo-btn ' + (memo ? 'has' : '') + '" data-memo="' + id + '">' + (memo ? '수정' : '메모 입력') + '</button>' : '');
         html += '<tr class="' + (m.former ? 'former' : '') + '"><td class="num">' + (i + 1) + '</td>' +
@@ -414,7 +430,7 @@
           '<td class="nowrap">' + esc(m.garrison || '-') + '</td>' +
           '<td class="priv-col">' + s3cell + '</td>' +
           '<td class="priv-col memo-cell">' + memoCell + '</td></tr>';
-        var link = m.former ? '#' : root + 'members/' + encodeURIComponent(m.char_id) + '.html';
+        var link = m.former ? '#' : memberBase + encodeURIComponent(m.char_id) + '.html';
         chtml += '<div class="mcard ' + (m.former ? 'former' : '') + '">' +
           '<a class="mcard-link' + (m.former ? ' former-link' : '') + '" href="' + link + '" data-id="' + id + '">' +
           '<div class="mcard-head"><div class="mcard-name"><span class="mcard-no">' + (i + 1) + '</span> ' + esc(m.nickname) + ' ' + jobBadge(m.job) + (m.former ? ' ' + statusBadge(statusOf(m)) : (mode !== 'season3' && on ? ' <span class="badge badge-mint">시즌3</span>' : '')) + '</div>' +
