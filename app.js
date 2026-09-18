@@ -266,7 +266,18 @@
     return fetch('/api/edit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ char_id: charId, field: field, value: value }) })
       .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || ('저장 실패 ' + r.status)); return j; }); });
   }
-  function ghUrl() { return 'https://api.github.com/repos/' + encodeURIComponent(REMOTE.repo.owner) + '/' + encodeURIComponent(REMOTE.repo.repo) + '/contents/' + REMOTE.adminFile; }
+  function ghUrl(file) { return 'https://api.github.com/repos/' + encodeURIComponent(REMOTE.repo.owner) + '/' + encodeURIComponent(REMOTE.repo.repo) + '/contents/' + (file || REMOTE.adminFile); }
+  var PUBLIC_FILE = 'data/public.json';
+  var pubOverlay = null;   // {season3:{id:0|1}, updated_at}
+  function ghPut(file, contentStr, message) {
+    return fetch(ghUrl(file) + '?ref=' + encodeURIComponent(REMOTE.repo.branch), { headers: ghHeaders(), cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (cur) {
+        var body = { message: message, content: utf8b64(contentStr), branch: REMOTE.repo.branch };
+        if (cur && cur.sha) body.sha = cur.sha;
+        return fetch(ghUrl(file), { method: 'PUT', headers: Object.assign({ 'Content-Type': 'application/json' }, ghHeaders()), body: JSON.stringify(body) });
+      });
+  }
   function ghHeaders() { return { 'Authorization': 'Bearer ' + REMOTE.token, 'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' }; }
   function loadAdmin(root) {
     var viaApi = fetch(ghUrl() + '?ref=' + encodeURIComponent(REMOTE.repo.branch), { headers: ghHeaders(), cache: 'no-store' })
@@ -287,17 +298,19 @@
     saving = true; toast('저장 중…');
     adm.updated_at = localIso();
     var payload;
+    function fail(r) { return r.json().catch(function () { return {}; }).then(function (j) { throw new Error((r.status === 401 || r.status === 403) ? '저장 권한 오류 (' + r.status + '): PC 관리 도구에서 토큰을 확인하고 다시 게시하세요' : (j.message || ('저장 실패 ' + r.status))); }); }
     encryptBlob(adm, adminPw).then(function (blob) {
       payload = JSON.stringify(blob);
-      return fetch(ghUrl() + '?ref=' + encodeURIComponent(REMOTE.repo.branch), { headers: ghHeaders(), cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; });
-    }).then(function (cur) {
-      var body = { message: '관리자 수정 ' + adm.updated_at.replace('T', ' '), content: utf8b64(payload), branch: REMOTE.repo.branch };
-      if (cur && cur.sha) body.sha = cur.sha;
-      return fetch(ghUrl(), { method: 'PUT', headers: Object.assign({ 'Content-Type': 'application/json' }, ghHeaders()), body: JSON.stringify(body) });
+      return ghPut(REMOTE.adminFile, payload, '관리자 수정 ' + adm.updated_at.replace('T', ' '));
     }).then(function (r) {
-      if (!r.ok) return r.json().catch(function () { return {}; }).then(function (j) { throw new Error((r.status === 401 || r.status === 403) ? '저장 권한 오류 (' + r.status + '): PC 관리 도구에서 토큰을 확인하고 다시 게시하세요' : (j.message || ('저장 실패 ' + r.status))); });
+      if (!r.ok) return fail(r);
+      // 공개 오버레이(시즌3 명단만) - 모든 방문자에게 즉시 반영
+      var pub = { v: 1, updated_at: adm.updated_at, season3: Object.assign({}, (pubOverlay && pubOverlay.season3) || {}, adm.season3 || {}) };
+      pubOverlay = pub;
+      return ghPut(PUBLIC_FILE, JSON.stringify(pub), '시즌3 명단 갱신 ' + adm.updated_at.replace('T', ' ')).then(function (r2) { if (!r2.ok) return fail(r2); });
+    }).then(function () {
       dirty = false; saving = false; if (lockBtn) lockBtn.classList.remove('dirty');
-      toast('저장됨 · 1분쯤 뒤 페이지에 반영됩니다', 'ok');
+      toast('저장됨 · 바로 반영됩니다', 'ok');
     }).catch(function (e) { saving = false; toast(String(e.message || e), 'err'); });
   }
   window.addEventListener('beforeunload', function (e) { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
@@ -320,7 +333,13 @@
     var M = JSON.parse(memberEl.textContent);
     var s3badge = document.getElementById('s3-badge'), btnS3 = document.getElementById('btn-s3'), btnMemo = document.getElementById('btn-memo'), actions = document.getElementById('member-admin-actions');
     var embedded = null;
-    function s3Of() { return has(adm && adm.season3, M.char_id) ? !!adm.season3[M.char_id] : !!M.season3; }
+    function s3Of() {
+      if (has(adm && adm.season3, M.char_id)) return !!adm.season3[M.char_id];
+      if (has(pubOverlay && pubOverlay.season3, M.char_id)) return !!pubOverlay.season3[M.char_id];
+      return !!M.season3;
+    }
+    if (!M.local) fetch((M.root || '../') + PUBLIC_FILE + '?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (pub) { if (pub && pub.season3) { pubOverlay = pub; paintMember(); } }).catch(function () { /* ignore */ });
     function memoOfM() { return has(adm && adm.memos, M.char_id) ? adm.memos[M.char_id] : (embedded ? embedded.memo : ''); }
     function paintMember() {
       if (s3badge) s3badge.hidden = !s3Of();
@@ -401,7 +420,11 @@
     var fq = document.getElementById('f-q'), fjob = document.getElementById('f-job');
     var formerBtn = document.getElementById('f-former'), hintEl = document.getElementById('admin-hint');
     function canEdit() { return LOCAL || !!REMOTE; }
-    function s3(m) { return has(adm && adm.season3, m.char_id) ? !!adm.season3[m.char_id] : !!m.season3; }
+    function s3(m) {
+      if (has(adm && adm.season3, m.char_id)) return !!adm.season3[m.char_id];
+      if (has(pubOverlay && pubOverlay.season3, m.char_id)) return !!pubOverlay.season3[m.char_id];
+      return !!m.season3;
+    }
     function memoOf(m) {
       if (has(adm && adm.memos, m.char_id)) return adm.memos[m.char_id] || '';
       return m.former ? (m.memo || '') : ((priv && priv.memos[m.char_id]) || '');
@@ -532,6 +555,10 @@
         loadAdmin(root).then(function () { if (hintEl) hintEl.textContent = '· 수정하면 자동 저장 (1분쯤 뒤 페이지 반영)'; applyPriv(data); });
       } else { if (hintEl) hintEl.textContent = '· 보기 전용 (저장용 토큰이 등록되지 않음)'; applyPriv(data); }
     });
+    if (!LOCAL) {   // 게시 페이지: 저장 즉시 반영된 시즌3 명단을 매번 새로 읽음 (CDN 캐시 우회)
+      fetch(root + PUBLIC_FILE + '?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (pub) { if (pub && pub.season3) { pubOverlay = pub; render(); } }).catch(function () { /* ignore */ });
+    }
     if (LOCAL) {
       fetch('/api/private').then(function (r) { return r.json(); }).then(function (data) {
         document.body.classList.add('unlocked');
