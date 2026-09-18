@@ -262,6 +262,8 @@
   //  REMOTE: 게시 페이지 → 비밀번호로 풀린 토큰으로 저장소 data/admin.json(암호화)에 커밋 (1.5초 후 자동)
   var LOCAL = false, REMOTE = null, CFG = null;
   var adm = null, dirty = false, saveTimer = null, saving = false;
+  var touched = { memos: {}, season3: {}, status: {} };   // 이 세션에서 바꾼 키만 기록 → 저장 시 최신 문서에 합침
+  function touch(kind, id) { touched[kind][id] = true; }
   function apiEdit(charId, field, value) {
     return fetch('/api/edit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ char_id: charId, field: field, value: value }) })
       .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || ('저장 실패 ' + r.status)); return j; }); });
@@ -306,17 +308,29 @@
   function saveAdmin() {
     if (!dirty || saving || !REMOTE) return;
     saving = true; toast('저장 중…');
-    adm.updated_at = localIso();
     var payload;
+    // 1) 최신 문서를 다시 받아 이 세션의 변경만 얹는다 (다른 기기·다른 탭의 저장을 덮어쓰지 않도록)
+    var merged = fetch(ghUrl() + '?ref=' + encodeURIComponent(REMOTE.repo.branch), { headers: ghHeaders(), cache: 'no-store' })
+      .then(function (r) { if (!r.ok) throw new Error('api ' + r.status); return r.json(); })
+      .then(function (j) { return decryptBlob(JSON.parse(b64utf8(j.content)), adminPw); })
+      .catch(function () { return null; })
+      .then(function (latest) {
+        var base = latest || { v: 1, memos: {}, season3: {}, status: {} };
+        base.memos = base.memos || {}; base.season3 = base.season3 || {}; base.status = base.status || {};
+        Object.keys(touched.memos).forEach(function (id) { base.memos[id] = adm.memos[id] || ''; });
+        Object.keys(touched.season3).forEach(function (id) { base.season3[id] = adm.season3[id] ? 1 : 0; });
+        Object.keys(touched.status).forEach(function (id) { base.status[id] = adm.status[id]; });
+        base.updated_at = localIso(); adm = base; return adm;
+      });
     function fail(r) { return r.json().catch(function () { return {}; }).then(function (j) { throw new Error((r.status === 401 || r.status === 403) ? '저장 권한 오류 (' + r.status + '): PC 관리 도구에서 토큰을 확인하고 다시 게시하세요' : (j.message || ('저장 실패 ' + r.status))); }); }
-    encryptBlob(adm, adminPw).then(function (blob) {
+    merged.then(function () { return encryptBlob(adm, adminPw); }).then(function (blob) {
       payload = JSON.stringify(blob);
       return ghPut(REMOTE.adminFile, payload, '관리자 수정 ' + adm.updated_at.replace('T', ' '));
     }).then(function (r) {
       if (!r.ok) return fail(r);
       // 공개 오버레이(시즌3 명단만) - 모든 방문자에게 즉시 반영
-      var pub = { v: 1, updated_at: adm.updated_at, season3: Object.assign({}, (pubOverlay && pubOverlay.season3) || {}, adm.season3 || {}) };
-      pubOverlay = pub;
+      var pub = { v: 1, updated_at: adm.updated_at, season3: Object.assign({}, adm.season3 || {}) };
+      pubOverlay = pub; touched = { memos: {}, season3: {}, status: {} };
       return ghPut(PUBLIC_FILE, JSON.stringify(pub), '시즌3 명단 갱신 ' + adm.updated_at.replace('T', ' ')).then(function (r2) { if (!r2.ok) return fail(r2); });
     }).then(function () {
       dirty = false; saving = false; if (lockBtn) lockBtn.classList.remove('dirty');
@@ -370,13 +384,13 @@
       var nv = s3Of() ? 0 : 1;
       if (LOCAL) return apiEdit(M.char_id, 'season3', nv).then(function () { M.season3 = nv; paintMember(); toast(nv ? '시즌3에 넣었습니다' : '시즌3에서 뺐습니다', 'ok'); }).catch(function (e) { toast(e.message, 'err'); });
       if (!REMOTE) return toast('보기 전용입니다. PC 관리 도구에서 토큰을 등록하세요', 'err');
-      adm.season3[M.char_id] = nv; paintMember(); markDirty();
+      adm.season3[M.char_id] = nv; touch('season3', M.char_id); paintMember(); markDirty();
     });
     if (btnMemo) btnMemo.addEventListener('click', function () {
       if (!LOCAL && !REMOTE) return toast('보기 전용입니다. PC 관리 도구에서 토큰을 등록하세요', 'err');
       memoModal(document.querySelector('h1').textContent, memoOfM(), function (v) {
         if (LOCAL) return apiEdit(M.char_id, 'memo', v).then(function () { embedded.memo = v; paintMember(); toast('메모 저장됨', 'ok'); }).catch(function (e) { toast(e.message, 'err'); });
-        adm.memos[M.char_id] = v; paintMember(); markDirty();
+        adm.memos[M.char_id] = v; touch('memos', M.char_id); paintMember(); markDirty();
       });
     });
   }
@@ -500,7 +514,7 @@
     // 저장 경로 통합: 성공 시 onDone(로컬 상태 갱신) 실행
     function save(charId, field, value, onDone) {
       if (LOCAL) return apiEdit(charId, field, value).then(function () { onDone(); render(); toast('저장됨', 'ok'); }).catch(function (e) { toast(e.message, 'err'); });
-      if (REMOTE) { if (field === 'memo') adm.memos[charId] = value; else if (field === 'season3') adm.season3[charId] = value ? 1 : 0; else if (field === 'status') adm.status[charId] = value; onDone(); render(); markDirty(); return Promise.resolve(); }
+      if (REMOTE) { if (field === 'memo') { adm.memos[charId] = value; touch('memos', charId); } else if (field === 'season3') { adm.season3[charId] = value ? 1 : 0; touch('season3', charId); } else if (field === 'status') { adm.status[charId] = value; touch('status', charId); } onDone(); render(); markDirty(); return Promise.resolve(); }
       return Promise.resolve();
     }
     function showFormerDetail(id) {
