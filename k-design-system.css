@@ -1,4 +1,4 @@
-/* K-Design System — Built 2026-09-18 11:32:20 */
+/* K-Design System — Built 2026-09-18 13:03:22 */
 
 
 /* ── 00-tokens.css ── */
@@ -4310,4 +4310,28 @@ select.cs-native { position: absolute; width: 1px; height: 1px; opacity: 0; poin
 /* 새 게시본 안내 바 */
 .um-update { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 2500; display: flex; align-items: center; gap: 10px; background: var(--navy-900); color: #fff; font-size: 0.82rem; padding: 10px 14px 10px 16px; border-radius: 100px; box-shadow: var(--shadow-xl); white-space: nowrap; }
 .um-update button { height: 30px; padding: 0 12px; border: none; border-radius: 100px; background: var(--mint-500); color: #fff; font-weight: 700; font-size: 0.8rem; cursor: pointer; font-family: var(--font-body); }
+
+/* ── 모바일 목록: 한 줄 행 (번호·닉네임·직업 | 무훈·공헌·공성) ── */
+.mrow { background: #fff; border-bottom: 1px solid var(--slate-100); }
+.mrow:last-child { border-bottom: none; }
+.mrow-main { display: grid; grid-template-columns: 22px minmax(0, 1fr) 62px 58px 30px; align-items: center; gap: 6px; padding: 9px 10px; min-height: 42px; text-decoration: none; color: inherit; }
+.mrow-main:hover { text-decoration: none; color: inherit; background: var(--slate-50); }
+.mrow-no { font-size: 0.72rem; color: var(--slate-400); text-align: right; font-variant-numeric: tabular-nums; }
+.mrow-name { display: flex; align-items: center; gap: 5px; min-width: 0; font-weight: 600; font-size: 0.9rem; color: var(--slate-800); white-space: nowrap; overflow: hidden; }
+.mrow-name .badge { padding: 1px 6px; font-size: 0.64rem; flex-shrink: 0; }
+.mrow-v { text-align: right; font-variant-numeric: tabular-nums; font-size: 0.84rem; color: var(--slate-600); white-space: nowrap; }
+.mrow-v.hi { color: var(--mint-700); font-weight: 700; }
+.mrow.former .mrow-name, .mrow.former .mrow-v { color: var(--slate-400); }
+.mrow-head { position: sticky; top: 0; z-index: 1; background: var(--navy-800); border-bottom: 2px solid var(--mint-500); }
+.mrow-head .mrow-main { padding: 6px 10px; min-height: 0; }
+.mrow-head .mrow-main:hover { background: var(--navy-800); }
+.mrow-head span { color: rgba(255,255,255,0.9); font-size: 0.7rem; font-weight: 600; letter-spacing: .3px; }
+.mrow-head [data-msort] { cursor: pointer; user-select: none; }
+.mrow-admin { display: none; gap: 6px; align-items: center; flex-wrap: wrap; padding: 0 10px 8px 38px; }
+.unlocked .mrow-admin { display: flex; }
+.mrow-memo { flex: 1 1 100%; font-size: 0.75rem; color: var(--slate-500); white-space: pre-wrap; }
+@media (max-width: 768px) {
+  .member-cards { display: block; gap: 0; padding: 0; border: 1px solid var(--slate-200); border-radius: 10px; background: #fff; }
+  .page-fixed .member-cards { padding: 0; }
+}
 

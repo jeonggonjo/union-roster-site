@@ -493,21 +493,21 @@
           '<td class="priv-col">' + s3cell + '</td>' +
           '<td class="priv-col memo-cell">' + memoCell + '</td></tr>';
         var link = m.former ? '#' : memberBase + encodeURIComponent(m.char_id) + '.html';
-        chtml += '<div class="mcard ' + (m.former ? 'former' : '') + '">' +
-          '<a class="mcard-link' + (m.former ? ' former-link' : '') + '" href="' + link + '" data-id="' + id + '">' +
-          '<div class="mcard-head"><div class="mcard-name"><span class="mcard-no">' + (i + 1) + '</span> ' + esc(m.nickname) + ' ' + jobBadge(m.job) + (m.former ? ' ' + statusBadge(statusOf(m)) : (mode !== 'season3' && on ? ' <span class="badge badge-mint">시즌3</span>' : '')) + '</div>' +
-          '<div class="mcard-rank">' + esc(m.rank || '') + '</div></div>' +
-          '<div class="mcard-sub">' + esc(m.garrison || '-') + (al.length ? ' · 이전 닉네임: ' + esc(al.join(', ')) : '') + '</div>' +
-          (memo ? '<div class="mcard-memo priv-col">' + esc(memo) + '</div>' : '') +
-          '<div class="mcard-stats">' +
-          '<div class="mcard-stat hi"><div class="l">무훈</div><div class="v">' + fmtShort(m.merit) + '</div></div>' +
-          '<div class="mcard-stat"><div class="l">공헌</div><div class="v">' + fmtN(m.contribution) + '</div></div>' +
-          '<div class="mcard-stat"><div class="l">공성</div><div class="v">' + fmtN(m.siege_count) + '</div></div>' +
-          '<div class="mcard-stat"><div class="l">번영</div><div class="v">' + fmtN(m.prosperity) + '</div></div>' +
-          '</div></a>' +
-          (edit ? '<div class="mcard-admin">' + s3cell + '<button type="button" class="memo-btn ' + (memo ? 'has' : '') + '" data-memo="' + id + '">' + (memo ? '메모 수정' : '메모 입력') + '</button></div>' : '') +
+        chtml += '<div class="mrow ' + (m.former ? 'former' : '') + '">' +
+          '<a class="mrow-main' + (m.former ? ' former-link' : '') + '" href="' + link + '" data-id="' + id + '">' +
+          '<span class="mrow-no">' + (i + 1) + '</span>' +
+          '<span class="mrow-name">' + esc(m.nickname) + ' ' + jobBadge(m.job) + (m.former ? ' ' + statusBadge(statusOf(m)) : (mode !== 'season3' && on ? ' <span class="badge badge-mint">시즌3</span>' : '')) + '</span>' +
+          '<span class="mrow-v hi">' + fmtShort(m.merit) + '</span><span class="mrow-v">' + fmtShort(m.contribution) + '</span><span class="mrow-v">' + fmtN(m.siege_count) + '</span>' +
+          '</a>' +
+          (edit ? '<div class="mrow-admin">' + s3cell + '<button type="button" class="memo-btn ' + (memo ? 'has' : '') + '" data-memo="' + id + '">' + (memo ? '메모 수정' : '메모') + '</button>' + (memo ? '<span class="mrow-memo">' + esc(memo) + '</span>' : '') + '</div>' : '') +
           '</div>';
       });
+      var head = '<div class="mrow mrow-head"><div class="mrow-main"><span class="mrow-no">#</span>' +
+        '<span class="mrow-name" data-msort="nickname">닉네임' + (st.sort === 'nickname' ? (st.order === 'asc' ? ' ▲' : ' ▼') : '') + '</span>' +
+        '<span class="mrow-v" data-msort="merit">무훈' + (st.sort === 'merit' ? (st.order === 'asc' ? ' ▲' : ' ▼') : '') + '</span>' +
+        '<span class="mrow-v" data-msort="contribution">공헌' + (st.sort === 'contribution' ? (st.order === 'asc' ? ' ▲' : ' ▼') : '') + '</span>' +
+        '<span class="mrow-v" data-msort="siege_count">공성' + (st.sort === 'siege_count' ? (st.order === 'asc' ? ' ▲' : ' ▼') : '') + '</span></div></div>';
+      chtml = head + chtml;
       tbody.innerHTML = html; cards.innerHTML = chtml;
     }
     function findRow(id) { var m = members.filter(function (x) { return x.char_id === id; })[0]; if (!m && priv) { var f = priv.former.filter(function (x) { return x.char_id === id; })[0]; if (f) m = Object.assign({ former: true }, f); } return m; }
@@ -544,6 +544,11 @@
         } });
     }
     document.addEventListener('click', function (e) {
+      var ms = e.target.closest('[data-msort]'); if (ms) {
+        var key = ms.getAttribute('data-msort');
+        if (st.sort === key) st.order = st.order === 'desc' ? 'asc' : 'desc'; else { st.sort = key; st.order = NUMERIC[key] ? 'desc' : 'asc'; }
+        render(); return;
+      }
       var a = e.target.closest('.former-link'); if (a) { e.preventDefault(); showFormerDetail(a.getAttribute('data-id')); return; }
       if (!canEdit()) return;
       var s = e.target.closest('[data-s3]'); if (s) {
