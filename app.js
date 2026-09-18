@@ -35,6 +35,7 @@
   function fmtT(t) { return t ? String(t).slice(0, 16).replace('T', ' ') : '-'; }
   function fmtD(t) { return t ? String(t).slice(0, 10) : '-'; }
   function localIso() { var d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 19); }
+  function has(o, k) { return !!o && Object.prototype.hasOwnProperty.call(o, k); }
 
   // ── 커스텀 셀렉트 (position:fixed 팝업, 화면 벗어나면 위로 flip) ──
   var openSelect = null;
@@ -75,9 +76,9 @@
   }
   document.addEventListener('click', function () { if (openSelect) openSelect(); });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && openSelect) openSelect(); });
-  document.querySelectorAll('.filter-static select, .search-body select, .stats-head select').forEach(enhanceSelect);
+  document.querySelectorAll('.filter-static select, .search-body select').forEach(enhanceSelect);
 
-  // ── SVG 유틸 ──
+  // ── SVG 선 차트 ──
   var NS = 'http://www.w3.org/2000/svg';
   function el(tag, attrs) { var e = document.createElementNS(NS, tag); for (var k in attrs) e.setAttribute(k, attrs[k]); return e; }
   function niceMax(v) {
@@ -86,21 +87,10 @@
     step = norm <= 1 ? mag * 0.2 : norm <= 2 ? mag * 0.5 : norm <= 5 ? mag : mag * 2;
     return Math.ceil(v / step) * step;
   }
-  function makeTip(host) { var tip = document.createElement('div'); tip.className = 'chart-tip'; host.appendChild(tip); return tip; }
-  function placeTip(host, svg, tip, W, H, px, py) {
-    var r = host.getBoundingClientRect(), sr = svg.getBoundingClientRect();
-    var x = sr.left - r.left + (px / W) * sr.width, y = sr.top - r.top + (py / H) * sr.height;
-    tip.style.display = 'block';
-    tip.style.left = Math.min(Math.max(x - tip.offsetWidth / 2, 0), r.width - tip.offsetWidth) + 'px';
-    tip.style.top = Math.max(y - tip.offsetHeight - 10, 0) + 'px';
-  }
-
-  // ── 단일 계열 선 차트: data [{t, v}] ──
-  function drawLine(host, data, opts) {
-    opts = opts || {};
+  function drawLine(host, data) {
     host.innerHTML = '';
     if (!data || !data.length) { host.textContent = '기록 없음'; return; }
-    var W = opts.width || host.clientWidth || 320, H = opts.height || 150, padL = 48, padR = 12, padT = 10, padB = 24;
+    var W = host.clientWidth || 320, H = 150, padL = 48, padR = 12, padT = 10, padB = 24;
     var svg = el('svg', { viewBox: '0 0 ' + W + ' ' + H });
     svg.style.height = H + 'px';
     var maxV = niceMax(Math.max.apply(null, data.map(function (d) { return Number(d.v) || 0; })));
@@ -123,12 +113,16 @@
     var dots = data.map(function (d, i) { var c = el('circle', { cx: x(i), cy: y(d.v), r: 4, 'class': 'series-dot' }); svg.appendChild(c); return c; });
     var hit = el('rect', { x: padL, y: padT, width: W - padL - padR, height: H - padT - padB, 'class': 'hit' }); svg.appendChild(hit);
     host.appendChild(svg);
-    var tip = makeTip(host);
+    var tip = document.createElement('div'); tip.className = 'chart-tip'; host.appendChild(tip);
     function show(i) {
       dots.forEach(function (c, j) { c.setAttribute('r', j === i ? 6 : 4); });
       hover.setAttribute('x1', x(i)); hover.setAttribute('x2', x(i)); hover.style.display = 'block';
       tip.innerHTML = esc(fmtT(data[i].t)) + '<br><strong>' + fmtN(data[i].v) + '</strong>';
-      placeTip(host, svg, tip, W, H, x(i), y(data[i].v));
+      var r = host.getBoundingClientRect(), sr = svg.getBoundingClientRect();
+      var px = sr.left - r.left + (x(i) / W) * sr.width, py = sr.top - r.top + (y(data[i].v) / H) * sr.height;
+      tip.style.display = 'block';
+      tip.style.left = Math.min(Math.max(px - tip.offsetWidth / 2, 0), r.width - tip.offsetWidth) + 'px';
+      tip.style.top = Math.max(py - tip.offsetHeight - 10, 0) + 'px';
     }
     function hide() { dots.forEach(function (c) { c.setAttribute('r', 4); }); hover.style.display = 'none'; tip.style.display = 'none'; }
     function onMove(ev) {
@@ -168,7 +162,7 @@
   function toast(msg, kind) {
     if (!toastEl) { toastEl = document.createElement('div'); toastEl.className = 'um-toast'; document.body.appendChild(toastEl); }
     toastEl.textContent = msg; toastEl.className = 'um-toast show ' + (kind || '');
-    clearTimeout(toastT); toastT = setTimeout(function () { toastEl.classList.remove('show'); }, kind === 'err' ? 5000 : 2500);
+    clearTimeout(toastT); toastT = setTimeout(function () { toastEl.classList.remove('show'); }, kind === 'err' ? 5000 : 2200);
   }
   var EYE = '<svg viewBox="0 0 24 24"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>';
   var LOCK = '<svg viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
@@ -196,32 +190,23 @@
   function utf8b64(s) { return b64e(new TextEncoder().encode(s)); }
   function b64utf8(s) { return new TextDecoder().decode(b64d(s.replace(/\n/g, ''))); }
 
-  // ── 관리자 잠금 해제 ──
-  var PW_KEY = 'um_admin_pw', TOKEN_KEY = 'um_gh_token';
+  // ── 게시 페이지: 비밀번호로 잠금 해제 (비공개 데이터 + 저장용 설정) ──
+  var PW_KEY = 'um_admin_pw';
   var privEl = document.getElementById('private-data');
   var lockBtn = document.getElementById('um-lock');
   var privBlob = null; try { privBlob = privEl ? JSON.parse(privEl.textContent) : null; } catch (e) { privBlob = null; }
-  var adminPw = null, ghToken = null, onUnlock = [];
+  var adminPw = null, onUnlock = [];
   function setUnlocked(data) {
     document.body.classList.add('unlocked');
-    if (lockBtn) { lockBtn.textContent = '관리자 모드'; lockBtn.classList.add('on'); }
+    if (lockBtn) { lockBtn.textContent = data.remote ? '관리자 모드' : '관리자 보기'; lockBtn.classList.add('on'); }
     onUnlock.forEach(function (fn) { fn(data); });
-  }
-  function loadToken() {
-    var raw = null; try { raw = localStorage.getItem(TOKEN_KEY); } catch (e) { /* ignore */ }
-    if (!raw || !adminPw) return Promise.resolve(null);
-    try { return decryptBlob(JSON.parse(raw), adminPw).then(function (d) { ghToken = d.token || null; return ghToken; }).catch(function () { return null; }); } catch (e) { return Promise.resolve(null); }
-  }
-  function saveToken(token) {
-    if (!token) { try { localStorage.removeItem(TOKEN_KEY); } catch (e) { /* ignore */ } ghToken = null; return Promise.resolve(); }
-    return encryptBlob({ token: token }, adminPw).then(function (blob) { try { localStorage.setItem(TOKEN_KEY, JSON.stringify(blob)); } catch (e) { /* ignore */ } ghToken = token; });
   }
   function tryUnlock(pw, silent) {
     if (!privBlob || !window.crypto || !crypto.subtle) { if (!silent) toast('이 환경에서는 잠금 해제를 지원하지 않습니다 (https 필요)', 'err'); return Promise.resolve(false); }
     return decryptBlob(privBlob, pw).then(function (data) {
       adminPw = pw;
       try { sessionStorage.setItem(PW_KEY, pw); } catch (e) { /* ignore */ }
-      return loadToken().then(function () { setUnlocked(data); return true; });
+      setUnlocked(data); return true;
     }).catch(function () { return false; });
   }
   function askPassword() {
@@ -243,39 +228,12 @@
         });
       } });
   }
-  function askToken(then) {
-    openModal({ cls: 'um-auth um-token', body:
-      '<div class="um-auth-icon">' + LOCK + '</div><h3>저장용 GitHub 토큰</h3><div class="um-sub">페이지에서 고친 메모·시즌3·탈퇴를 저장소에 기록하려면 한 번만 등록합니다.</div>' +
-      '<div class="um-help">GitHub → Settings → Developer settings → Fine-grained tokens → Generate<ol><li>Repository access: <b>Only select repositories → union-roster-site</b></li><li>Permissions → Repository → <b>Contents: Read and write</b></li><li>생성된 토큰(github_pat_…)을 아래에 붙여넣기</li></ol></div>' +
-      '<form id="um-tk-form"><div class="um-field"><input type="password" id="um-tk" placeholder="github_pat_…" autocomplete="off"><button type="button" class="um-eye" id="um-tk-eye" aria-label="표시">' + EYE + '</button></div>' +
-      '<div class="um-err" id="um-tk-err"></div><button type="submit" class="um-primary">토큰 저장</button></form>' +
-      (ghToken ? '<button type="button" class="um-link" id="um-tk-del">등록된 토큰 삭제</button>' : '') +
-      '<div class="um-foot">토큰은 관리자 비밀번호로 암호화해 이 기기 브라우저에만 보관됩니다. 페이지 파일에는 절대 들어가지 않습니다.</div>',
-      onReady: function (back, close) {
-        var inp = back.querySelector('#um-tk'), err = back.querySelector('#um-tk-err');
-        setTimeout(function () { inp.focus(); }, 50);
-        back.querySelector('#um-tk-eye').addEventListener('click', function () { inp.type = inp.type === 'password' ? 'text' : 'password'; });
-        var del = back.querySelector('#um-tk-del'); if (del) del.addEventListener('click', function () { saveToken(null).then(function () { close(); toast('토큰을 삭제했습니다'); }); });
-        back.querySelector('#um-tk-form').addEventListener('submit', function (e) {
-          e.preventDefault();
-          var v = inp.value.trim();
-          if (!/^(github_pat_|ghp_|gho_)[A-Za-z0-9_]{20,}$/.test(v)) { err.textContent = '토큰 형식이 아닙니다 (github_pat_ 로 시작하는 값을 붙여넣으세요).'; return; }
-          saveToken(v).then(function () { close(); toast('토큰을 등록했습니다', 'ok'); if (then) then(); });
-        });
-      } });
-  }
   if (lockBtn) {
     if (!privBlob) lockBtn.style.display = 'none';
     lockBtn.addEventListener('click', function () {
       if (document.body.classList.contains('unlocked')) {
-        openModal({ title: '관리자 모드', body: '<div class="d-flex flex-column gap-2">' +
-          '<button type="button" class="btn btn-secondary" id="um-act-token">' + (ghToken ? '저장용 토큰 변경·삭제' : '저장용 GitHub 토큰 등록') + '</button>' +
-          '<button type="button" class="btn btn-secondary" id="um-act-lock">잠그기 (관리자 모드 끄기)</button></div>',
-          onReady: function (back, close) {
-            back.querySelector('#um-act-token').addEventListener('click', function () { close(); askToken(); });
-            back.querySelector('#um-act-lock').addEventListener('click', function () { try { sessionStorage.removeItem(PW_KEY); } catch (e) { /* ignore */ } location.reload(); });
-          } });
-        return;
+        if (dirty) { toast('저장 중인 내용이 있습니다. 잠시 후 다시 시도하세요', 'err'); return; }
+        try { sessionStorage.removeItem(PW_KEY); } catch (e) { /* ignore */ } location.reload(); return;
       }
       askPassword();
     });
@@ -283,21 +241,25 @@
     if (saved && privBlob) tryUnlock(saved, true);
   }
 
-  // ── 관리 문서(admin.json): 읽기(overlay) + GitHub API 저장 ──
-  var CFG = null;   // {root, repo:{owner,repo,branch}, adminFile}
-  var adm = null;   // {v, updated_at, memos, season3, status}
-  var admSha = null, dirty = false, saveTimer = null, saving = false;
-  function ghUrl() { return 'https://api.github.com/repos/' + encodeURIComponent(CFG.repo.owner) + '/' + encodeURIComponent(CFG.repo.repo) + '/contents/' + CFG.adminFile; }
-  function ghHeaders() { return { 'Authorization': 'Bearer ' + ghToken, 'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' }; }
-  function loadAdmin() {
-    // 1) 토큰이 있으면 API로 최신본(즉시 반영), 2) 아니면 게시된 파일(빌드 후 반영)
-    var viaApi = (ghToken && CFG.repo) ? fetch(ghUrl() + '?ref=' + encodeURIComponent(CFG.repo.branch), { headers: ghHeaders() })
+  // ── 저장 경로 두 가지 ──
+  //  LOCAL : 내 PC 관리 도구가 렌더한 페이지 → /api/edit 로 DB에 즉시 저장
+  //  REMOTE: 게시 페이지 → 비밀번호로 풀린 토큰으로 저장소 data/admin.json(암호화)에 커밋 (1.5초 후 자동)
+  var LOCAL = false, REMOTE = null, CFG = null;
+  var adm = null, dirty = false, saveTimer = null, saving = false;
+  function apiEdit(charId, field, value) {
+    return fetch('/api/edit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ char_id: charId, field: field, value: value }) })
+      .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || ('저장 실패 ' + r.status)); return j; }); });
+  }
+  function ghUrl() { return 'https://api.github.com/repos/' + encodeURIComponent(REMOTE.repo.owner) + '/' + encodeURIComponent(REMOTE.repo.repo) + '/contents/' + REMOTE.adminFile; }
+  function ghHeaders() { return { 'Authorization': 'Bearer ' + REMOTE.token, 'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' }; }
+  function loadAdmin(root) {
+    var viaApi = fetch(ghUrl() + '?ref=' + encodeURIComponent(REMOTE.repo.branch), { headers: ghHeaders(), cache: 'no-store' })
       .then(function (r) { if (!r.ok) throw new Error('api ' + r.status); return r.json(); })
-      .then(function (j) { admSha = j.sha; return JSON.parse(b64utf8(j.content)); }) : Promise.reject(new Error('no token'));
+      .then(function (j) { return JSON.parse(b64utf8(j.content)); });
     return viaApi.catch(function () {
-      return fetch(CFG.root + CFG.adminFile + '?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { if (!r.ok) throw new Error('file ' + r.status); return r.json(); });
+      return fetch(root + REMOTE.adminFile + '?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { if (!r.ok) throw new Error('file ' + r.status); return r.json(); });
     }).then(function (blob) { return decryptBlob(blob, adminPw); })
-      .then(function (doc) { adm = doc; if (!adm.memos) adm.memos = {}; if (!adm.season3) adm.season3 = {}; if (!adm.status) adm.status = {}; return adm; })
+      .then(function (doc) { adm = doc || {}; adm.memos = adm.memos || {}; adm.season3 = adm.season3 || {}; adm.status = adm.status || {}; return adm; })
       .catch(function () { adm = { v: 1, updated_at: null, memos: {}, season3: {}, status: {} }; return adm; });
   }
   function markDirty() {
@@ -305,25 +267,20 @@
     clearTimeout(saveTimer); saveTimer = setTimeout(saveAdmin, 1500);
   }
   function saveAdmin() {
-    if (!dirty || saving) return;
-    if (!CFG || !CFG.repo) { toast('게시 저장소 정보가 없어 저장할 수 없습니다', 'err'); return; }
-    if (!ghToken) { askToken(function () { saveAdmin(); }); return; }
+    if (!dirty || saving || !REMOTE) return;
     saving = true; toast('저장 중…');
     adm.updated_at = localIso();
     var payload;
     encryptBlob(adm, adminPw).then(function (blob) {
       payload = JSON.stringify(blob);
-      // 최신 sha 확보 (동시 수정 시 마지막 저장이 이김)
-      return fetch(ghUrl() + '?ref=' + encodeURIComponent(CFG.repo.branch), { headers: ghHeaders() }).then(function (r) { return r.ok ? r.json() : null; });
+      return fetch(ghUrl() + '?ref=' + encodeURIComponent(REMOTE.repo.branch), { headers: ghHeaders(), cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; });
     }).then(function (cur) {
-      var body = { message: '관리자 수정 ' + adm.updated_at.replace('T', ' '), content: utf8b64(payload), branch: CFG.repo.branch };
+      var body = { message: '관리자 수정 ' + adm.updated_at.replace('T', ' '), content: utf8b64(payload), branch: REMOTE.repo.branch };
       if (cur && cur.sha) body.sha = cur.sha;
       return fetch(ghUrl(), { method: 'PUT', headers: Object.assign({ 'Content-Type': 'application/json' }, ghHeaders()), body: JSON.stringify(body) });
     }).then(function (r) {
-      if (!r.ok) return r.json().catch(function () { return {}; }).then(function (j) { throw new Error((r.status === 401 || r.status === 403) ? '토큰 권한 오류 (' + r.status + '): 토큰의 저장소·권한을 확인하세요' : (j.message || ('저장 실패 ' + r.status))); });
-      return r.json();
-    }).then(function (j) {
-      admSha = j.content && j.content.sha; dirty = false; saving = false; if (lockBtn) lockBtn.classList.remove('dirty');
+      if (!r.ok) return r.json().catch(function () { return {}; }).then(function (j) { throw new Error((r.status === 401 || r.status === 403) ? '저장 권한 오류 (' + r.status + '): PC 관리 도구에서 토큰을 확인하고 다시 게시하세요' : (j.message || ('저장 실패 ' + r.status))); });
+      dirty = false; saving = false; if (lockBtn) lockBtn.classList.remove('dirty');
       toast('저장됨 · 1분쯤 뒤 페이지에 반영됩니다', 'ok');
     }).catch(function (e) { saving = false; toast(String(e.message || e), 'err'); });
   }
@@ -340,27 +297,31 @@
       } });
   }
 
-  // ── 정적 상세 페이지 ──
+  // ── 상세 페이지 ──
   var memberEl = document.getElementById('member-data');
   var privMemo = document.getElementById('priv-memo');
   if (memberEl) {
-    var M = JSON.parse(memberEl.textContent); CFG = M;
-    var s3badge = document.getElementById('s3-badge'), btnS3 = document.getElementById('btn-s3'), btnMemo = document.getElementById('btn-memo');
+    var M = JSON.parse(memberEl.textContent);
+    var s3badge = document.getElementById('s3-badge'), btnS3 = document.getElementById('btn-s3'), btnMemo = document.getElementById('btn-memo'), actions = document.getElementById('member-admin-actions');
     var embedded = null;
-    function s3Of() { return (adm && Object.prototype.hasOwnProperty.call(adm.season3, M.char_id)) ? !!adm.season3[M.char_id] : !!M.season3; }
-    function memoOfM() { return (adm && Object.prototype.hasOwnProperty.call(adm.memos, M.char_id)) ? adm.memos[M.char_id] : (embedded ? embedded.memo : ''); }
+    function s3Of() { return has(adm && adm.season3, M.char_id) ? !!adm.season3[M.char_id] : !!M.season3; }
+    function memoOfM() { return has(adm && adm.memos, M.char_id) ? adm.memos[M.char_id] : (embedded ? embedded.memo : ''); }
     function paintMember() {
       if (s3badge) s3badge.hidden = !s3Of();
       if (btnS3) btnS3.textContent = s3Of() ? '시즌3에서 빼기' : '시즌3에 넣기';
       if (privMemo) privMemo.textContent = memoOfM() || '(메모 없음)';
       var al = document.getElementById('priv-alias'); if (al && embedded) al.textContent = embedded.aliases && embedded.aliases.length ? embedded.aliases.join(', ') : '(변경 없음)';
     }
-    onUnlock.push(function (data) { embedded = data; loadAdmin().then(paintMember); });
-    if (btnS3) btnS3.addEventListener('click', function () { adm.season3[M.char_id] = s3Of() ? 0 : 1; paintMember(); markDirty(); });
-    if (btnMemo) btnMemo.addEventListener('click', function () { memoModal(document.querySelector('h1').textContent, memoOfM(), function (v) { adm.memos[M.char_id] = v; paintMember(); markDirty(); }); });
+    onUnlock.push(function (data) {
+      embedded = data;
+      if (data.remote) { REMOTE = data.remote; loadAdmin(M.root || '../').then(function () { if (actions) { actions.hidden = false; actions.classList.add('priv-actions-open'); } paintMember(); }); }
+      else paintMember();
+    });
+    if (btnS3) btnS3.addEventListener('click', function () { if (!REMOTE) return; adm.season3[M.char_id] = s3Of() ? 0 : 1; paintMember(); markDirty(); });
+    if (btnMemo) btnMemo.addEventListener('click', function () { if (!REMOTE) return; memoModal(document.querySelector('h1').textContent, memoOfM(), function (v) { adm.memos[M.char_id] = v; paintMember(); markDirty(); }); });
   }
 
-  // ── 정적 목록 페이지 ──
+  // ── 목록 페이지 ──
   var JOB_CLS = { '진군': 'badge-red', '병참': 'badge-yellow', '청낭': 'badge-green', '천공': 'badge-blue', '신행': 'badge-purple' };
   var STATUS = { active: ['미확인', 'badge-gray'], left: ['탈퇴', 'badge-gray'], kicked: ['추방', 'badge-red'] };
   function jobBadge(j) { return j ? '<span class="badge ' + (JOB_CLS[j] || 'badge-gray') + '">' + esc(j) + '</span>' : ''; }
@@ -399,19 +360,21 @@
   if (rosterEl) {
     var R = JSON.parse(rosterEl.textContent); CFG = R;
     var members = R.rows, root = R.root || './', mode = R.mode || 'all';
+    LOCAL = !!R.local;
     var priv = null, showFormer = false;
     var NUMERIC = { prosperity: 1, merit: 1, contribution: 1, siege_count: 1 };
     var st = { sort: 'merit', order: 'desc' };
     var table = document.getElementById('roster-table'), tbody = table.querySelector('tbody');
     var cards = document.getElementById('roster-cards'), countEl = document.getElementById('roster-count'), totalEl = document.getElementById('roster-total');
-    var fq = document.getElementById('f-q'), fjob = document.getElementById('f-job'), fsort = document.getElementById('f-sort');
+    var fq = document.getElementById('f-q'), fjob = document.getElementById('f-job');
     var formerBtn = document.getElementById('f-former'), hintEl = document.getElementById('admin-hint');
-    function s3(m) { return (adm && Object.prototype.hasOwnProperty.call(adm.season3, m.char_id)) ? !!adm.season3[m.char_id] : !!m.season3; }
+    function canEdit() { return LOCAL || !!REMOTE; }
+    function s3(m) { return has(adm && adm.season3, m.char_id) ? !!adm.season3[m.char_id] : !!m.season3; }
     function memoOf(m) {
-      if (adm && Object.prototype.hasOwnProperty.call(adm.memos, m.char_id)) return adm.memos[m.char_id] || '';
+      if (has(adm && adm.memos, m.char_id)) return adm.memos[m.char_id] || '';
       return m.former ? (m.memo || '') : ((priv && priv.memos[m.char_id]) || '');
     }
-    function statusOf(m) { return (adm && adm.status[m.char_id]) || m.status; }
+    function statusOf(m) { return (adm && adm.status && adm.status[m.char_id]) || m.status; }
     function aliasList(m) { return m.former ? (m.aliases || []) : ((priv && priv.aliases[m.char_id]) || []); }
     function baseRows() {
       var rows = members.filter(function (m) { return mode !== 'season3' || s3(m); });
@@ -429,9 +392,9 @@
     function render() {
       var rows = sortRows(filtered(), st.sort, st.order, NUMERIC[st.sort]);
       paintSort(table, st);
-      if (fsort) { fsort.value = st.sort + ':' + st.order; if (fsort._csSync) fsort._csSync(); }
       countEl.textContent = rows.length;
       if (totalEl && mode === 'season3') totalEl.textContent = members.filter(s3).length;
+      var edit = canEdit();
       var html = '', chtml = '';
       if (!rows.length) html = '<tr><td class="empty-state" colspan="11">조건에 맞는 맹원이 없습니다.</td></tr>';
       rows.forEach(function (m, i) {
@@ -440,8 +403,8 @@
         var nameCell = m.former
           ? '<a href="#" class="fw-600 former-link" data-id="' + id + '">' + esc(m.nickname) + '</a> ' + statusBadge(statusOf(m)) + aliasHtml
           : '<a href="' + root + 'members/' + encodeURIComponent(m.char_id) + '.html" class="fw-600">' + esc(m.nickname) + '</a>' + (mode !== 'season3' && on ? ' <span class="badge badge-mint">시즌3</span>' : '') + aliasHtml;
-        var s3cell = m.former ? '' : '<button type="button" class="s3-chip ' + (on ? 'on' : '') + '" data-s3="' + id + '">' + (on ? '시즌3' : '미정') + '</button>';
-        var memoCell = '<span class="memo-text">' + esc(memo) + '</span><button type="button" class="memo-btn ' + (memo ? 'has' : '') + '" data-memo="' + id + '">' + (memo ? '수정' : '메모 입력') + '</button>';
+        var s3cell = m.former ? '' : (edit ? '<button type="button" class="s3-chip ' + (on ? 'on' : '') + '" data-s3="' + id + '">' + (on ? '시즌3' : '미정') + '</button>' : (on ? '<span class="badge badge-mint">시즌3</span>' : '<span class="badge badge-gray">미정</span>'));
+        var memoCell = '<span class="memo-text">' + esc(memo) + '</span>' + (edit ? '<button type="button" class="memo-btn ' + (memo ? 'has' : '') + '" data-memo="' + id + '">' + (memo ? '수정' : '메모 입력') + '</button>' : '');
         html += '<tr class="' + (m.former ? 'former' : '') + '"><td class="num">' + (i + 1) + '</td>' +
           '<td>' + nameCell + '</td>' +
           '<td>' + jobBadge(m.job) + '</td><td>' + esc(m.rank || '-') + '</td>' +
@@ -464,12 +427,18 @@
           '<div class="mcard-stat"><div class="l">공성</div><div class="v">' + fmtN(m.siege_count) + '</div></div>' +
           '<div class="mcard-stat"><div class="l">번영</div><div class="v">' + fmtN(m.prosperity) + '</div></div>' +
           '</div></a>' +
-          '<div class="mcard-admin">' + s3cell + '<button type="button" class="memo-btn ' + (memo ? 'has' : '') + '" data-memo="' + id + '">' + (memo ? '메모 수정' : '메모 입력') + '</button></div>' +
+          (edit ? '<div class="mcard-admin">' + s3cell + '<button type="button" class="memo-btn ' + (memo ? 'has' : '') + '" data-memo="' + id + '">' + (memo ? '메모 수정' : '메모 입력') + '</button></div>' : '') +
           '</div>';
       });
       tbody.innerHTML = html; cards.innerHTML = chtml;
     }
     function findRow(id) { var m = members.filter(function (x) { return x.char_id === id; })[0]; if (!m && priv) { var f = priv.former.filter(function (x) { return x.char_id === id; })[0]; if (f) m = Object.assign({ former: true }, f); } return m; }
+    // 저장 경로 통합: 성공 시 onDone(로컬 상태 갱신) 실행
+    function save(charId, field, value, onDone) {
+      if (LOCAL) return apiEdit(charId, field, value).then(function () { onDone(); render(); toast('저장됨', 'ok'); }).catch(function (e) { toast(e.message, 'err'); });
+      if (REMOTE) { if (field === 'memo') adm.memos[charId] = value; else if (field === 'season3') adm.season3[charId] = value ? 1 : 0; else if (field === 'status') adm.status[charId] = value; onDone(); render(); markDirty(); return Promise.resolve(); }
+      return Promise.resolve();
+    }
     function showFormerDetail(id) {
       var f = priv && priv.former.filter(function (x) { return x.char_id === id; })[0];
       if (!f) return;
@@ -482,28 +451,37 @@
         '<dl class="detail-grid"><dt>캐릭터 ID</dt><dd>' + esc(f.char_id) + '</dd><dt>이전 닉네임</dt><dd>' + esc((f.aliases || []).join(', ') || '-') + '</dd>' +
         '<dt>가입 확인</dt><dd>' + esc(fmtD(f.joined_at)) + '</dd><dt>마지막 확인</dt><dd>' + esc(fmtT(f.last_seen_at)) + '</dd>' +
         (f.left_at ? '<dt>처리일</dt><dd>' + esc(fmtD(f.left_at)) + '</dd>' : '') + '<dt>메모</dt><dd id="fm-memo">' + esc(memoOf(f) || '-') + '</dd></dl>' +
-        '<div class="priv-actions mt-2 priv-actions-open">' +
-        '<button type="button" class="btn-action-sm" data-st="left">탈퇴 처리</button><button type="button" class="btn-action-sm delete" data-st="kicked">추방 처리</button><button type="button" class="btn-action-sm" data-st="active">미확인으로 되돌리기</button>' +
-        '<button type="button" class="btn-action-sm add" id="fm-memo-btn">메모 입력</button></div>' +
+        (canEdit() ? '<div class="priv-actions priv-actions-open mt-2">' +
+          '<button type="button" class="btn-action-sm" data-st="left">탈퇴 처리</button><button type="button" class="btn-action-sm delete" data-st="kicked">추방 처리</button><button type="button" class="btn-action-sm" data-st="active">미확인으로 되돌리기</button>' +
+          '<button type="button" class="btn-action-sm add" id="fm-memo-btn">메모 입력</button></div>' : '') +
         '<div class="table-wrap mt-3"><table class="data-table"><thead><tr><th>구분</th><th>시각</th><th>닉네임</th><th>직업</th><th>직위</th><th class="num">번영</th><th class="num">무훈</th><th class="num">공헌</th><th class="num">공성</th><th>주둔지</th></tr></thead><tbody>' + rows + '</tbody></table></div>',
         onReady: function (back, close) {
-          back.querySelectorAll('[data-st]').forEach(function (b) { b.addEventListener('click', function () { adm.status[f.char_id] = b.getAttribute('data-st'); markDirty(); render(); close(); }); });
-          back.querySelector('#fm-memo-btn').addEventListener('click', function () { memoModal(f.nickname, memoOf(f), function (v) { adm.memos[f.char_id] = v; back.querySelector('#fm-memo').textContent = v || '-'; markDirty(); render(); }); });
+          if (!canEdit()) return;
+          back.querySelectorAll('[data-st]').forEach(function (b) { b.addEventListener('click', function () {
+            var v = b.getAttribute('data-st'); save(f.char_id, 'status', v, function () { f.status = v; }); close();
+          }); });
+          back.querySelector('#fm-memo-btn').addEventListener('click', function () { memoModal(f.nickname, memoOf(f), function (v) {
+            save(f.char_id, 'memo', v, function () { f.memo = v; back.querySelector('#fm-memo').textContent = v || '-'; });
+          }); });
         } });
     }
     document.addEventListener('click', function (e) {
       var a = e.target.closest('.former-link'); if (a) { e.preventDefault(); showFormerDetail(a.getAttribute('data-id')); return; }
-      var s = e.target.closest('[data-s3]'); if (s) { var id = s.getAttribute('data-s3'), m = findRow(id); if (!m) return; adm.season3[id] = s3(m) ? 0 : 1; markDirty(); render(); toast(m.nickname + (adm.season3[id] ? ' → 시즌3 넣음' : ' → 시즌3 뺌')); return; }
-      var mb = e.target.closest('[data-memo]') || (e.target.closest('td.memo-cell')); if (mb) {
+      if (!canEdit()) return;
+      var s = e.target.closest('[data-s3]'); if (s) {
+        var id = s.getAttribute('data-s3'), m = findRow(id); if (!m) return;
+        var nv = s3(m) ? 0 : 1;
+        save(id, 'season3', nv, function () { m.season3 = nv; }); return;
+      }
+      var mb = e.target.closest('[data-memo]') || e.target.closest('td.memo-cell'); if (mb) {
         var mid = mb.getAttribute('data-memo') || (mb.querySelector('[data-memo]') && mb.querySelector('[data-memo]').getAttribute('data-memo'));
         var mm = findRow(mid); if (!mm) return;
-        memoModal(mm.nickname, memoOf(mm), function (v) { adm.memos[mid] = v; markDirty(); render(); });
+        memoModal(mm.nickname, memoOf(mm), function (v) { save(mid, 'memo', v, function () { if (mm.former) mm.memo = v; else if (priv) priv.memos[mid] = v; }); });
       }
     });
     setupSortable(table, st, render);
     fq.addEventListener('input', render);
     fjob.addEventListener('change', render);
-    if (fsort) fsort.addEventListener('change', function () { var p = fsort.value.split(':'); st.sort = p[0]; st.order = p[1]; render(); });
     var reset = document.getElementById('f-reset');
     if (reset) reset.addEventListener('click', function (ev) { ev.preventDefault(); fq.value = ''; fjob.value = ''; if (fjob._csSync) fjob._csSync(); st.sort = 'merit'; st.order = 'desc'; render(); });
     if (formerBtn) formerBtn.addEventListener('click', function (ev) {
@@ -511,14 +489,24 @@
       formerBtn.textContent = (showFormer ? '이전 맹원 숨기기' : '이전 맹원 보기') + ' (' + (priv ? priv.former.length : 0) + ')';
       render();
     });
-    onUnlock.push(function (data) {
+    function applyPriv(data) {
       priv = data;
       if (formerBtn) { formerBtn.style.display = priv.former.length ? '' : 'none'; formerBtn.textContent = '이전 맹원 보기 (' + priv.former.length + ')'; }
-      loadAdmin().then(function () {
-        if (hintEl) hintEl.textContent = ghToken ? '· 수정하면 자동 저장' : '· 저장하려면 [관리자 모드] → 토큰 등록';
-        render();
-      });
+      render();
+    }
+    onUnlock.push(function (data) {
+      if (data.remote) {
+        REMOTE = data.remote;
+        loadAdmin(root).then(function () { if (hintEl) hintEl.textContent = '· 수정하면 자동 저장 (1분쯤 뒤 페이지 반영)'; applyPriv(data); });
+      } else { if (hintEl) hintEl.textContent = '· 보기 전용 (저장용 토큰이 등록되지 않음)'; applyPriv(data); }
     });
+    if (LOCAL) {
+      fetch('/api/private').then(function (r) { return r.json(); }).then(function (data) {
+        document.body.classList.add('unlocked');
+        if (hintEl) hintEl.textContent = '· 내 PC 수정 모드: 바로 저장 (게시 전까지 페이지에는 미반영)';
+        applyPriv(data);
+      }).catch(function () { toast('비공개 데이터를 불러오지 못했습니다', 'err'); });
+    }
     render();
   }
 })();
