@@ -269,6 +269,16 @@
   function ghUrl(file) { return 'https://api.github.com/repos/' + encodeURIComponent(REMOTE.repo.owner) + '/' + encodeURIComponent(REMOTE.repo.repo) + '/contents/' + (file || REMOTE.adminFile); }
   var PUBLIC_FILE = 'data/public.json';
   var pubOverlay = null;   // {season3:{id:0|1}, updated_at}
+  var SITE_REPO = null;    // 공개 저장소 {owner, repo, branch} - 페이지 JSON에 내장
+  function fetchPublic(root) {
+    var viaApi = SITE_REPO
+      ? fetch('https://api.github.com/repos/' + encodeURIComponent(SITE_REPO.owner) + '/' + encodeURIComponent(SITE_REPO.repo) + '/contents/' + PUBLIC_FILE + '?ref=' + encodeURIComponent(SITE_REPO.branch) + '&t=' + Date.now(),
+          { headers: { 'Accept': 'application/vnd.github.raw+json' }, cache: 'no-store' }).then(function (r) { if (!r.ok) throw new Error('api ' + r.status); return r.json(); })
+      : Promise.reject(new Error('no repo'));
+    return viaApi.catch(function () {
+      return fetch(root + PUBLIC_FILE + '?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; });
+    }).catch(function () { return null; });
+  }
   function ghPut(file, contentStr, message) {
     return fetch(ghUrl(file) + '?ref=' + encodeURIComponent(REMOTE.repo.branch), { headers: ghHeaders(), cache: 'no-store' })
       .then(function (r) { return r.ok ? r.json() : null; })
@@ -330,7 +340,7 @@
   var memberEl = document.getElementById('member-data');
   var privMemo = document.getElementById('priv-memo');
   if (memberEl) {
-    var M = JSON.parse(memberEl.textContent);
+    var M = JSON.parse(memberEl.textContent); SITE_REPO = M.siteRepo || null;
     var s3badge = document.getElementById('s3-badge'), btnS3 = document.getElementById('btn-s3'), btnMemo = document.getElementById('btn-memo'), actions = document.getElementById('member-admin-actions');
     var embedded = null;
     function s3Of() {
@@ -338,8 +348,7 @@
       if (has(pubOverlay && pubOverlay.season3, M.char_id)) return !!pubOverlay.season3[M.char_id];
       return !!M.season3;
     }
-    if (!M.local) fetch((M.root || '../') + PUBLIC_FILE + '?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (pub) { if (pub && pub.season3) { pubOverlay = pub; paintMember(); } }).catch(function () { /* ignore */ });
+    if (!M.local) fetchPublic(M.root || '../').then(function (pub) { if (pub && pub.season3) { pubOverlay = pub; paintMember(); } });
     function memoOfM() { return has(adm && adm.memos, M.char_id) ? adm.memos[M.char_id] : (embedded ? embedded.memo : ''); }
     function paintMember() {
       if (s3badge) s3badge.hidden = !s3Of();
@@ -409,7 +418,7 @@
 
   var rosterEl = document.getElementById('roster-data');
   if (rosterEl) {
-    var R = JSON.parse(rosterEl.textContent); CFG = R;
+    var R = JSON.parse(rosterEl.textContent); CFG = R; SITE_REPO = R.siteRepo || null;
     var members = R.rows, root = R.root || './', mode = R.mode || 'all', memberBase = R.memberBase || (root + 'members/');
     LOCAL = !!R.local;
     var priv = null, showFormer = false;
@@ -555,10 +564,7 @@
         loadAdmin(root).then(function () { if (hintEl) hintEl.textContent = '· 수정하면 자동 저장 (1분쯤 뒤 페이지 반영)'; applyPriv(data); });
       } else { if (hintEl) hintEl.textContent = '· 보기 전용 (저장용 토큰이 등록되지 않음)'; applyPriv(data); }
     });
-    if (!LOCAL) {   // 게시 페이지: 저장 즉시 반영된 시즌3 명단을 매번 새로 읽음 (CDN 캐시 우회)
-      fetch(root + PUBLIC_FILE + '?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; })
-        .then(function (pub) { if (pub && pub.season3) { pubOverlay = pub; render(); } }).catch(function () { /* ignore */ });
-    }
+    if (!LOCAL) fetchPublic(root).then(function (pub) { if (pub && pub.season3) { pubOverlay = pub; render(); } });
     if (LOCAL) {
       fetch('/api/private').then(function (r) { return r.json(); }).then(function (data) {
         document.body.classList.add('unlocked');
