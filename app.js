@@ -384,6 +384,8 @@
           var v = {}; ['nickname', 'job', 'rank', 'garrison'].forEach(function (k) { v[k] = f[k].value.trim(); });
           ['prosperity', 'merit', 'contribution', 'siege_count'].forEach(function (k) { var n = parseInt(String(f[k].value).replace(/[^0-9-]/g, ''), 10); v[k] = isNaN(n) ? 0 : n; });
           if (!v.nickname) { back.querySelector('#um-row-err').textContent = '닉네임을 입력하세요.'; return; }
+          // 바뀐 항목만 저장 (안 바꾼 값은 엑셀이 갱신되면 따라가도록)
+          if (opts.diff) { var d = {}; Object.keys(v).forEach(function (k) { var c = cur[k]; if (String(c === undefined || c === null ? '' : c) !== String(v[k])) d[k] = v[k]; }); if (!Object.keys(d).length) { close(); return; } v = d; }
           onSave(v); close();
         });
         var rb = back.querySelector('#um-row-reset'); if (rb) rb.addEventListener('click', function () { opts.onReset(); close(); });
@@ -624,6 +626,7 @@
         rowForm(em.nickname + ' 수정', em, function (v) {
           save(eid, 'row', v, function () { if (LOCAL) { var ov = em.manual ? null : (v); if (em.manual) Object.assign(em, v); else { pubLocal.overrides[eid] = Object.assign({}, pubGet('overrides', eid) || {}, ov); } } });
         }, {
+          diff: !em.manual,
           onReset: em.manual ? null : function () { save(eid, 'row_reset', null, function () { pubLocal.overrides[eid] = {}; }); },
           onHide: function () { save(eid, 'hide', null, function () { pubLocal.hidden[eid] = 1; }); }
         });
