@@ -1,4 +1,4 @@
-/* K-Design System — Built 2026-09-18 17:14:01 */
+/* K-Design System — Built 2026-09-21 09:07:19 */
 
 
 /* ── 00-tokens.css ── */
@@ -4344,4 +4344,7 @@ select.cs-native { position: absolute; width: 1px; height: 1px; opacity: 0; poin
 .row-edit-btn { border: none; background: none; color: var(--slate-400); cursor: pointer; font-size: 0.85rem; padding: 0 4px; line-height: 1; vertical-align: middle; }
 .row-edit-btn:hover { color: var(--mint-700); }
 @media (max-width: 768px) { .um-grid { grid-template-columns: 1fr 1fr; gap: 8px; } .um-lbl input, .um-lbl select { height: 38px; } }
+
+/* 모바일 행: 공성 열 제거 후 4열 */
+.mrow-main { grid-template-columns: 22px minmax(0, 1fr) 68px 62px; }
 

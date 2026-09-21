@@ -372,7 +372,7 @@
       '<label class="um-lbl">직업<select name="job"><option value="">선택</option>' + jobOpts + '</select></label>' +
       inp('rank', '직위', cur.rank) + inp('garrison', '주둔지', cur.garrison) +
       inp('prosperity', '번영', cur.prosperity, 'number') + inp('merit', '무훈 (숫자, 예 5200000)', cur.merit, 'number') +
-      inp('contribution', '공헌', cur.contribution, 'number') + inp('siege_count', '공성 횟수', cur.siege_count, 'number') +
+      inp('contribution', '공헌', cur.contribution, 'number') +
       '</div><div class="um-err" id="um-row-err"></div><div class="um-actions">' +
       (opts.onReset ? '<button type="button" class="btn btn-secondary" id="um-row-reset">엑셀 값으로 되돌리기</button>' : '') +
       (opts.onHide ? '<button type="button" class="btn btn-danger" id="um-row-hide">목록에서 빼기</button>' : '') +
@@ -382,7 +382,7 @@
         f.addEventListener('submit', function (e) {
           e.preventDefault();
           var v = {}; ['nickname', 'job', 'rank', 'garrison'].forEach(function (k) { v[k] = f[k].value.trim(); });
-          ['prosperity', 'merit', 'contribution', 'siege_count'].forEach(function (k) { var n = parseInt(String(f[k].value).replace(/[^0-9-]/g, ''), 10); v[k] = isNaN(n) ? 0 : n; });
+          ['prosperity', 'merit', 'contribution'].forEach(function (k) { var n = parseInt(String(f[k].value).replace(/[^0-9-]/g, ''), 10); v[k] = isNaN(n) ? 0 : n; });
           if (!v.nickname) { back.querySelector('#um-row-err').textContent = '닉네임을 입력하세요.'; return; }
           // 바뀐 항목만 저장 (안 바꾼 값은 엑셀이 갱신되면 따라가도록)
           if (opts.diff) { var d = {}; Object.keys(v).forEach(function (k) { var c = cur[k]; if (String(c === undefined || c === null ? '' : c) !== String(v[k])) d[k] = v[k]; }); if (!Object.keys(d).length) { close(); return; } v = d; }
@@ -527,7 +527,7 @@
       if (totalEl && mode === 'season3') totalEl.textContent = members.filter(s3).length;
       var edit = canEdit();
       var html = '', chtml = '';
-      if (!rows.length) html = '<tr><td class="empty-state" colspan="11">조건에 맞는 맹원이 없습니다.</td></tr>';
+      if (!rows.length) html = '<tr><td class="empty-state" colspan="10">조건에 맞는 맹원이 없습니다.</td></tr>';
       rows.forEach(function (m, i) {
         var al = aliasList(m), memo = memoOf(m), on = s3(m), id = esc(m.char_id);
         var aliasHtml = al.length ? '<div class="alias">이전 닉네임: ' + esc(al.join(', ')) + '</div>' : '';
@@ -542,7 +542,7 @@
           '<td>' + jobBadge(m.job) + '</td><td>' + esc(m.rank || '-') + '</td>' +
           '<td class="num">' + fmtN(m.prosperity) + '</td>' +
           '<td class="num" title="' + fmtN(m.merit) + '">' + fmtShort(m.merit) + '</td>' +
-          '<td class="num">' + fmtN(m.contribution) + '</td><td class="num">' + fmtN(m.siege_count) + '</td>' +
+          '<td class="num">' + fmtN(m.contribution) + '</td>' +
           '<td class="nowrap">' + esc(m.garrison || '-') + '</td>' +
           '<td class="priv-col">' + s3cell + '</td>' +
           '<td class="priv-col memo-cell">' + memoCell + '</td></tr>';
@@ -551,7 +551,7 @@
           '<a class="mrow-main' + (m.former ? ' former-link' : '') + '" href="' + link + '" data-id="' + id + '">' +
           '<span class="mrow-no">' + (i + 1) + '</span>' +
           '<span class="mrow-name">' + esc(m.nickname) + ' ' + jobBadge(m.job) + (m.former ? ' ' + statusBadge(statusOf(m)) : (mode !== 'season3' && on ? ' <span class="badge badge-mint">시즌3</span>' : '')) + '</span>' +
-          '<span class="mrow-v hi">' + fmtShort(m.merit) + '</span><span class="mrow-v">' + fmtShort(m.contribution) + '</span><span class="mrow-v">' + fmtN(m.siege_count) + '</span>' +
+          '<span class="mrow-v hi">' + fmtShort(m.merit) + '</span><span class="mrow-v">' + fmtShort(m.contribution) + '</span>' +
           '</a>' +
           (edit ? '<div class="mrow-admin">' + s3cell + '<button type="button" class="memo-btn ' + (memo ? 'has' : '') + '" data-memo="' + id + '">' + (memo ? '메모 수정' : '메모') + '</button>' + (m.former ? '' : '<button type="button" class="memo-btn" data-edit="' + id + '">수정</button>') + (memo ? '<span class="mrow-memo">' + esc(memo) + '</span>' : '') + '</div>' : '') +
           '</div>';
@@ -559,8 +559,7 @@
       var head = '<div class="mrow mrow-head"><div class="mrow-main"><span class="mrow-no">#</span>' +
         '<span class="mrow-name" data-msort="nickname">닉네임' + (st.sort === 'nickname' ? (st.order === 'asc' ? ' ▲' : ' ▼') : '') + '</span>' +
         '<span class="mrow-v" data-msort="merit">무훈' + (st.sort === 'merit' ? (st.order === 'asc' ? ' ▲' : ' ▼') : '') + '</span>' +
-        '<span class="mrow-v" data-msort="contribution">공헌' + (st.sort === 'contribution' ? (st.order === 'asc' ? ' ▲' : ' ▼') : '') + '</span>' +
-        '<span class="mrow-v" data-msort="siege_count">공성' + (st.sort === 'siege_count' ? (st.order === 'asc' ? ' ▲' : ' ▼') : '') + '</span></div></div>';
+        '<span class="mrow-v" data-msort="contribution">공헌' + (st.sort === 'contribution' ? (st.order === 'asc' ? ' ▲' : ' ▼') : '') + '</span></div></div>';
       chtml = head + chtml;
       tbody.innerHTML = html; cards.innerHTML = chtml;
     }
@@ -589,7 +588,7 @@
       if (!f) return;
       var rows = (f.series || []).map(function (s) {
         return '<tr><td>' + (s.kind === 'history' ? '시즌' : '주간') + '</td><td class="nowrap">' + esc(fmtT(s.captured_at)) + '</td><td>' + esc(s.nickname) + '</td><td>' + esc(s.job) + '</td><td>' + esc(s.rank) + '</td>' +
-          '<td class="num">' + fmtN(s.prosperity) + '</td><td class="num">' + fmtN(s.merit) + '</td><td class="num">' + fmtN(s.contribution) + '</td><td class="num">' + fmtN(s.siege_count) + '</td><td>' + esc(s.garrison || '') + '</td></tr>';
+          '<td class="num">' + fmtN(s.prosperity) + '</td><td class="num">' + fmtN(s.merit) + '</td><td class="num">' + fmtN(s.contribution) + '</td><td>' + esc(s.garrison || '') + '</td></tr>';
       }).join('');
       var cur = statusOf(f);
       openModal({ title: f.nickname + ' (' + (STATUS[cur] || [cur])[0] + ')', body:
@@ -600,7 +599,7 @@
           (f.hidden ? '<button type="button" class="btn-action-sm add" data-st="unhide">목록으로 되돌리기</button>' :
           '<button type="button" class="btn-action-sm" data-st="left">탈퇴 처리</button><button type="button" class="btn-action-sm delete" data-st="kicked">추방 처리</button><button type="button" class="btn-action-sm" data-st="active">미확인으로 되돌리기</button>') +
           '<button type="button" class="btn-action-sm add" id="fm-memo-btn">메모 입력</button></div>' : '') +
-        '<div class="table-wrap mt-3"><table class="data-table"><thead><tr><th>구분</th><th>시각</th><th>닉네임</th><th>직업</th><th>직위</th><th class="num">번영</th><th class="num">무훈</th><th class="num">공헌</th><th class="num">공성</th><th>주둔지</th></tr></thead><tbody>' + rows + '</tbody></table></div>',
+        '<div class="table-wrap mt-3"><table class="data-table"><thead><tr><th>구분</th><th>시각</th><th>닉네임</th><th>직업</th><th>직위</th><th class="num">번영</th><th class="num">무훈</th><th class="num">공헌</th><th>주둔지</th></tr></thead><tbody>' + rows + '</tbody></table></div>',
         onReady: function (back, close) {
           if (!canEdit()) return;
           back.querySelectorAll('[data-st]').forEach(function (b) { b.addEventListener('click', function () {
